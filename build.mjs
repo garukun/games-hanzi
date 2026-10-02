@@ -17,11 +17,16 @@ const OUT = join(OUT_DIR, 'index.html');
 
 const html = readFileSync(SRC, 'utf8');
 
-// The tests extract this block, so a missing marker means tests would silently
-// stop covering the voice engine.
-for (const marker of ['VOICE ENGINE START', 'VOICE ENGINE END']) {
+// The tests extract these blocks, so a missing marker means tests would silently
+// stop covering the shipped code.
+for (const marker of [
+  'VOICE ENGINE START',
+  'VOICE ENGINE END',
+  'FACES START',
+  'FACES END',
+]) {
   if (!html.includes(marker)) {
-    console.error(`build: ${SRC} is missing the "${marker}" marker that tests/voice.test.js relies on`);
+    console.error(`build: ${SRC} is missing the "${marker}" marker that the tests rely on`);
     process.exit(1);
   }
 }

@@ -162,12 +162,43 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
   font-family:var(--disp);background:radial-gradient(circle at 32% 27%,rgba(255,255,255,.6),rgba(255,255,255,0) 44%),var(--c);
   box-shadow:inset 0 -6px 12px rgba(0,0,0,.16),0 8px 16px rgba(43,58,85,.24);border:3px solid rgba(255,255,255,.8);
   touch-action:manipulation;cursor:pointer;will-change:transform;}
-.btxt{line-height:1;white-space:nowrap;text-shadow:0 2px 0 rgba(0,0,0,.2);animation:bob 3.4s ease-in-out infinite alternate;animation-delay:var(--d,0s);}
+.btxt{position:relative;line-height:1;white-space:nowrap;text-shadow:0 2px 0 rgba(0,0,0,.2);animation:bob 3.4s ease-in-out infinite alternate;animation-delay:var(--d,0s);}
 .bubble.spawn{animation:spawnIn .5s cubic-bezier(.34,1.56,.64,1) backwards;animation-delay:var(--sd,0s);}
 .bubble.shake{animation:shk .45s;}
 .bubble.burst{animation:burst .55s ease-out forwards;pointer-events:none;}
 .bubble.burst::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:4px solid rgba(255,255,255,.85);animation:ringOut .5s ease-out;}
 .bubble.shrink{animation:shrink .3s ease-in forwards;pointer-events:none;}
+
+/* ---------- BUBBLE FACES ----------
+   Merged from gemini.html, which drew a bear/rabbit/cat/panda/frog on every
+   bubble with a smile timer on tap. Same idea, but as a purely decorative
+   layer pinned behind the character so nothing about legibility or hit-testing
+   changes. Silhouette comes from the .f-<species> class on the bubble; the
+   colours are set as custom properties by the Faces module. */
+.face{position:absolute;inset:0;pointer-events:none;--ink:#33415c;--ear:#8a5a2b;--eye:var(--ink);--ring:transparent;--ringw:0;}
+.face i{position:absolute;display:block;}
+.face .ear{width:26%;height:26%;top:-6%;background:var(--ear);}
+.face .ear.l{left:4%;border-radius:50%;}
+.face .ear.r{right:4%;border-radius:50%;}
+.face .eye{width:12%;height:12%;top:9%;border-radius:50%;background:var(--eye);box-shadow:0 0 0 var(--ringw) var(--ring);}
+.face .eye.l{left:30%;}
+.face .eye.r{right:30%;}
+.face .mouth{left:39%;bottom:9%;width:22%;height:9%;border-bottom:3px solid var(--ink);border-radius:0 0 50% 50% / 0 0 90% 90%;}
+.f-bear .ear{width:23%;height:23%;top:-4%;}
+.f-panda .eye{width:13%;height:11%;}
+.f-rabbit .ear{width:13%;height:40%;top:-26%;border-radius:50% 50% 35% 35%;}
+.f-rabbit .ear.l{left:12%;} .f-rabbit .ear.r{right:12%;}
+.f-cat .ear{width:28%;height:27%;top:-9%;clip-path:polygon(50% 0,100% 100%,0 100%);}
+.f-cat .ear.l{left:2%;} .f-cat .ear.r{right:2%;}
+.f-frog .ear{display:none;}
+.f-frog .eye{width:20%;height:20%;top:3%;}
+.f-frog .eye.l{left:24%;} .f-frog .eye.r{right:24%;}
+/* Tapped: the bubble perks up, the eyes squint shut and the mouth opens. */
+.bubble.smile{scale:1.08;}
+.bubble.smile .face{animation:cheer .6s cubic-bezier(.34,1.56,.64,1);}
+.bubble.smile .eye{width:14%;height:11%;top:10%;border-radius:50% 50% 14% 14%;}
+.bubble.smile .mouth{height:13%;background:var(--ink);}
+#playArea.noface .face{display:none;}
 
 /* ---------- CLEAR ---------- */
 #clearOverlay{position:absolute;inset:0;z-index:20;display:none;align-items:center;justify-content:center;
@@ -240,6 +271,7 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 @keyframes starPop{0%{transform:scale(0) rotate(-40deg)}70%{transform:scale(1.3) rotate(10deg)}100%{transform:scale(1) rotate(0)}}
 @keyframes cardIn{from{transform:scale(.7) translateY(20px);opacity:0}to{transform:scale(1) translateY(0);opacity:1}}
 @keyframes revPop{0%{transform:scale(.96)}50%{transform:scale(1.03)}100%{transform:scale(1)}}
+@keyframes cheer{0%{transform:scale(1)}30%{transform:scale(1.16)}100%{transform:scale(1)}}
 
 /* ---------- RESPONSIVE ---------- */
 @media (orientation:landscape) and (min-width:760px){
@@ -377,13 +409,16 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
   <div class="helpCard">
     <h3>怎么玩？</h3>
     <div class="helpRow"><span class="he" style="background:var(--coral)">🔊</span><p>点喇叭，<b>听</b>一个汉字或词的声音。</p></div>
-    <div class="helpRow"><span class="he" style="background:var(--teal)">👀</span><p>在飘动的泡泡里<b>找</b>出它，泡泡会轻轻碰撞哦。</p></div>
+    <div class="helpRow"><span class="he" style="background:var(--teal)">👀</span><p>在飘动的泡泡里<b>找</b>出它，泡泡会轻轻碰撞、还会对你笑哦。</p></div>
     <div class="helpRow"><span class="he" style="background:var(--amber)">👆</span><p>点对了会夸你，点错了也会<b>读</b>给你听，再试试！</p></div>
     <div class="setRow"><span class="setLab">🎙 发音</span><div class="segs" id="optEngine">
       <button class="seg" data-v="auto">自动</button><button class="seg" data-v="neural">AI</button><button class="seg" data-v="local">系统</button>
     </div></div>
     <div class="setRow"><span class="setLab">🐢 语速</span><div class="segs" id="optSpeed">
       <button class="seg" data-v="slow">慢</button><button class="seg" data-v="normal">正常</button>
+    </div></div>
+    <div class="setRow"><span class="setLab">🐻 泡泡脸</span><div class="segs" id="optFaces">
+      <button class="seg" data-v="on">开</button><button class="seg" data-v="off">关</button>
     </div></div>
     <div class="helpNote"> 发音默认走「自动」：先尝试普通话神经网络人声，读不准时自动改用系统语音。
       给小朋友玩时，请打开设备声音，并允许网页朗读语音。</div>
@@ -711,15 +746,16 @@ const Voice=(()=>{
 
 /* ============ STORE ============ */
 const Store=(()=>{
-  const K='paopao-guoxue-v2'; let d={stars:{},sfx:true,voice:true,engine:'auto',speed:'normal'};
+  const K='paopao-guoxue-v2'; let d={stars:{},sfx:true,voice:true,engine:'auto',speed:'normal',faces:'on'};
   function load(){ try{const s=JSON.parse(localStorage.getItem(K)); if(s)d=Object.assign(d,s);}catch(e){} }
   function save(){ try{localStorage.setItem(K,JSON.stringify(d));}catch(e){} }
   load();
+  if(d.faces!=='on'&&d.faces!=='off') d.faces='on';
   return { get stars(){return d.stars;}, get sfx(){return d.sfx;}, get voice(){return d.voice;},
-    get engine(){return d.engine;}, get speed(){return d.speed;},
+    get engine(){return d.engine;}, get speed(){return d.speed;}, get faces(){return d.faces;},
     setStar(id,n){ d.stars[id]=Math.max(d.stars[id]||0,n); save(); },
     setSfx(v){d.sfx=v;save();}, setVoice(v){d.voice=v;save();},
-    setEngine(v){d.engine=v;save();}, setSpeed(v){d.speed=v;save();} };
+    setEngine(v){d.engine=v;save();}, setSpeed(v){d.speed=v;save();}, setFaces(v){d.faces=(v==='off')?'off':'on';save();} };
 })();
 
 /* ============ CONFETTI ============ */
@@ -768,11 +804,14 @@ function syncToggles(){ $('#tglSfx').classList.toggle('off',!Store.sfx); $('#tgl
   $('#btnMute').textContent=(Store.sfx&&Store.voice)?'🔊':'';
   SFX.setOn(Store.sfx); Voice.setOn(Store.voice);
   Voice.setEngine(Store.engine); Voice.setSpeed(Store.speed);
+  $('#playArea').classList.toggle('noface',Store.faces==='off');
   $$('#optEngine .seg').forEach(b=>b.classList.toggle('on',b.dataset.v===Store.engine));
-  $$('#optSpeed .seg').forEach(b=>b.classList.toggle('on',b.dataset.v===Store.speed)); }
+  $$('#optSpeed .seg').forEach(b=>b.classList.toggle('on',b.dataset.v===Store.speed));
+  $$('#optFaces .seg').forEach(b=>b.classList.toggle('on',b.dataset.v===Store.faces)); }
 function wireSeg(id,get,set){ $$(id+' .seg').forEach(b=>{ b.onclick=()=>{ SFX.click(); set(b.dataset.v); syncToggles(); }; }); }
 wireSeg('#optEngine',()=>Store.engine,v=>Store.setEngine(v));
 wireSeg('#optSpeed',()=>Store.speed,v=>Store.setSpeed(v));
+wireSeg('#optFaces',()=>Store.faces,v=>Store.setFaces(v));
 $('#tglSfx').onclick=()=>{ Store.setSfx(!Store.sfx); if(Store.sfx){SFX.ensure();SFX.click();} syncToggles(); };
 $('#tglVoice').onclick=()=>{ Store.setVoice(!Store.voice); if(Store.voice){Voice.prime();Voice.speak('语音已打开');} syncToggles(); };
 $('#btnMute').onclick=()=>{ const anyOn=Store.sfx||Store.voice; Store.setSfx(!anyOn); Store.setVoice(!anyOn);
@@ -820,6 +859,41 @@ function renderMap(){
     if(ci<CHAPTERS.length-1){ const lk=document.createElement('div'); lk.className='rowLink'; lk.textContent='﹀'; wrap.appendChild(lk); }
   });
 }
+
+/* ==== FACES START ==== */
+/* Bubble personalities. gemini.html drew an animal on every floating bubble and
+   switched it to a smile for 40 frames after a tap; that reaction is the single
+   most "alive" thing in either version, so it lives here as pure data + markup
+   that tests/faces.test.js can run without a DOM. */
+const Faces=(()=>{
+  const REACT_MS=1200;   // how long a tapped bubble stays smiling
+  const SPECIES=[
+    {id:'panda', ear:'round', earCol:'#33415c', ink:'#33415c', eye:'#ffffff', ring:'#33415c', ringW:'.26em'},
+    {id:'bear',  ear:'round', earCol:'#8a5a2b', ink:'#33415c', eye:'#33415c', ring:'transparent', ringW:'0'},
+    {id:'rabbit',ear:'tall',  earCol:'#ffd7e8', ink:'#33415c', eye:'#33415c', ring:'transparent', ringW:'0'},
+    {id:'cat',   ear:'point', earCol:'#ffcf5c', ink:'#33415c', eye:'#33415c', ring:'transparent', ringW:'0'},
+    {id:'frog',  ear:'none',  earCol:'#4ade80', ink:'#12351f', eye:'#ffffff', ring:'#12351f', ringW:'.14em'},
+  ];
+  const KINDS=['round','tall','point','none'];
+  const byId={}; SPECIES.forEach(s=>{ byId[s.id]=s; });
+
+  /** Cycle the roster so neighbouring bubbles never wear the same face. */
+  function pick(i,prevId){
+    const n=SPECIES.length;
+    let k=((Math.trunc(i)||0)%n+n)%n;
+    if(byId[prevId] && SPECIES[k].id===prevId) k=(k+1)%n;
+    return SPECIES[k];
+  }
+  /** The species id for a bubble, given the previous one. */
+  function idFor(i,prevId){ return pick(i,prevId).id; }
+  /** CSS custom properties for a species, ready for setProperty(). */
+  function vars(sp){ return {'--ear':sp.earCol,'--ink':sp.ink,'--eye':sp.eye,'--ring':sp.ring,'--ringw':sp.ringW}; }
+  /** The face layer's children. Every one of the five is positioned by the .face CSS. */
+  function markup(){ return '<i class="ear l"></i><i class="ear r"></i><i class="eye l"></i><i class="eye r"></i><i class="mouth"></i>'; }
+  function cls(sp){ return 'f-'+sp.id; }
+  return {SPECIES,KINDS,REACT_MS,pick,idFor,vars,markup,cls,byId};
+})();
+/* ==== FACES END ==== */
 
 /* ============ GAME ENGINE ============ */
 let G=null; // game state
@@ -887,6 +961,7 @@ function nextRound(){
   const {texts,targetText}=makeTexts();
   const sh=shuffle(texts.map((t,i)=>({t,i})));
   const placed=[];
+  let prevFace=null;
   sh.forEach((item,idx)=>{
     const len=item.t.length; const {r,fs}=radiusFor(len);
     let x,y,ok=false;
@@ -897,10 +972,15 @@ function nextRound(){
     const ang=Math.random()*Math.PI*2; const base=clamp(Math.min(G.W,G.H)*0.05,20,42); const sp=base*(0.7+Math.random()*0.6);
     const b={x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,r,fs,text:item.t,isTarget:item.t===targetText,found:false,dead:false,
       color:PAL[(item.i+idx)%PAL.length],d:(Math.random()*2).toFixed(2)};
-    const el=document.createElement('button'); el.className='bubble spawn'; el.style.setProperty('--c',b.color);
+    const sp2=Faces.pick(idx,prevFace); prevFace=sp2.id;
+    b.face=sp2.id;
+    const el=document.createElement('button'); el.className='bubble spawn '+Faces.cls(sp2); el.style.setProperty('--c',b.color);
     el.style.width=el.style.height=(2*r)+'px'; el.style.setProperty('--sd',(idx*0.04)+'s');
     el.style.setProperty('--pos','translate3d('+(x-r)+'px,'+(y-r)+'px,0)');
     el.style.transform='translate3d('+(x-r)+'px,'+(y-r)+'px,0)';
+    const fx=document.createElement('span'); fx.className='face'; fx.innerHTML=Faces.markup();
+    const fv=Faces.vars(sp2); for(const k in fv) fx.style.setProperty(k,fv[k]);
+    el.appendChild(fx);
     const tx=document.createElement('span'); tx.className='btxt'; tx.textContent=item.t; tx.style.fontSize=fs+'px'; tx.style.setProperty('--d',b.d+'s');
     if(len>=3)tx.style.letterSpacing='-1px';
     el.appendChild(tx); el._b=b; b.el=el; $('#playArea').appendChild(el);
@@ -945,6 +1025,9 @@ function tapBubble(b,clientX,clientY){
   if(G.lock||b.dead)return;
   SFX.tap(); b.vy-=26; b.vx+=(Math.random()-.5)*20;
   Voice.speak(b.text,{interrupt:true});
+  // gemini.html set a smileTimer on the tapped bubble; do the same with a class
+  // so a wrong tap still gets the friendly "it's ok" reaction.
+  smile(b);
   if(b.isTarget&&!b.found){
     b.found=true; b.dead=true; G.found++; G.streak++; G.maxStreak=Math.max(G.maxStreak,G.streak);
     vib(20); SFX.ding();
@@ -965,6 +1048,13 @@ function tapBubble(b,clientX,clientY){
 }
 function showCombo(){ if(G.streak>=2){ const c=$('#comboChip'); c.textContent='连对 ×'+G.streak+' ⭐'; c.classList.remove('show'); void c.offsetWidth; c.classList.add('show'); } }
 function hideCombo(){ $('#comboChip').classList.remove('show'); }
+/* Re-arm a tapped bubble's smile. Re-tapping restarts the timer rather than
+   doing nothing, and a bubble that already burst must not be resurrected. */
+function smile(b){
+  if(!b||!b.el||b.dead)return;
+  const el=b.el; clearTimeout(b.smT); el.classList.remove('smile'); void el.offsetWidth;
+  el.classList.add('smile'); b.smT=setTimeout(()=>{ el.classList.remove('smile'); },Faces.REACT_MS);
+}
 
 $('#playArea').addEventListener('pointerup',e=>{
   const el=e.target.closest&&e.target.closest('.bubble'); if(!el||!el._b)return;
