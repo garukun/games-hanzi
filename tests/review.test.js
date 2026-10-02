@@ -446,7 +446,9 @@ test('the 第/关 literals are spans, so CSS can hide them for a review', () => 
   assert.ok(/\.lvlChip\.review \.lname\{display:inline;\}/.test(src), 'a review is unidentifiable on a 320px screen');
   const narrow = slice(src, '#hud{gap:5px;}', '\n}');
   const at = src.indexOf('#hud{gap:5px;}');
-  assert.match(src.slice(Math.max(0, at - 40), at), /@media \(max-width:375px\)\{\s*$/, 'the adaptation lost its breakpoint');
+  // Read the breakpoint out of the source rather than pinning it: it is a measured pixel count
+  // (see tests/score.test.js) and has already moved once from 375 to 409.
+  assert.match(src.slice(Math.max(0, at - 40), at), /@media \(max-width:\d+px\)\{\s*$/, 'the adaptation lost its breakpoint');
   assert.ok(/\.lvlChip \.lkind\{display:none;\}/.test(narrow), 'the review kind still wraps the HUD at 320px');
 });
 

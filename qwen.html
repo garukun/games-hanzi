@@ -160,11 +160,23 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 /* ---------- GAME ---------- */
 #scr-game{padding:8px clamp(8px,2.4vw,20px) 8px;}
 .gameCol{flex:1;display:flex;flex-direction:column;gap:8px;min-height:0;}
-#hud{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+/* The header is one row, always. `flex-wrap:wrap` let it become two or three: measured 63px
+   (one extra line), 97px and — the worst — 114px, i.e. 68px of play area gone, and it happened
+   on the 💧 mistake counter appearing, which is exactly the moment the child is struggling. The
+   dots were the height driver: `.dots{flex-wrap:wrap}` stacked a 12px dot per row once the
+   flex line left them only a few px, so 7 rounds became a 114px column of dots. Both rows are
+   nowrap now, and `.dots` clips instead of stacking: a partly hidden round counter is a far
+   smaller loss than two thirds of the board. */
+#hud{display:flex;align-items:center;gap:7px;flex-wrap:nowrap;}
 .lvlChip{background:var(--paper);border:3px solid var(--ink);border-radius:14px;padding:5px 12px;font-family:var(--disp);
   font-size:clamp(13px,3vw,17px);box-shadow:0 4px 0 rgba(43,58,85,.18);white-space:nowrap;}
-.dots{display:flex;gap:5px;align-items:center;flex:1;justify-content:center;flex-wrap:wrap;}
-.dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--ink);background:#fff;}
+/* `safe center` is the other half of clip-don't-stack: `center` alone clips the *start* of an
+   overflowing row, which would hide the rounds already done and leave the child looking at the
+   middle of a level. `safe` falls back to start-alignment exactly when it overflows, so what
+   survives is always "how far you got". */
+.dots{display:flex;gap:5px;align-items:center;flex:1;justify-content:safe center;flex-wrap:nowrap;
+  min-width:0;overflow:hidden;}
+.dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--ink);background:#fff;flex:0 0 auto;}
 .dot.done{background:var(--gold);}
 .dot.cur{animation:dotPulse 1s ease-in-out infinite;}
 .missChip{background:var(--paper);border:3px solid var(--ink);border-radius:14px;padding:4px 10px;font-weight:700;font-size:13px;
@@ -177,14 +189,27 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 .scoreChip #scoreN{min-width:2.4ch;text-align:right;font-variant-numeric:tabular-nums;}
 .scoreChip.pop{animation:scorePop .45s cubic-bezier(.34,1.56,.64,1);}
 .scoreChip.big{animation:scoreBig .5s cubic-bezier(.34,1.56,.64,1);}
-/* A fourth fixed-width chip in the HUD was enough to push the row onto three lines on a
-   narrow phone — measured: the header went from 46px to 116px at 320 and 360 wide, i.e. 70px
-   straight off the play area. The level *name* is the only thing in that row that can go, so
-   below 376px it does; the 得分 chip stays, because it is the thing that has to keep moving.
-   Swept 320/360/375/390/414/430/480 wide: the header is 46px at every one of them, same as
-   before the score chip existed. */
-@media (max-width:375px){
+/* A fourth fixed-width chip in the HUD was enough to push the row onto two lines on a narrow
+   phone — measured: the header went from 46px to 116px at 320 and 360 wide, i.e. 70px straight
+   off the play area. The level *name* is the only thing in that row that can go, so below 419px
+   it does; the 得分 chip stays, because it is the thing that has to keep moving. The name is
+   not lost to the child — every level node on the map still prints it. */
+@media (max-width:419px){
   #hud{gap:5px;}
+  /* A mistake counter and seven round dots do not both fit at 320 wide: the five chips
+     measure 270px plus 25px of gaps in a 304px header, which leaves the dots 9px. So on the
+     narrowest phones the counter takes the dots' place rather than squeezing them into
+     slivers — both indicators stay readable, one of them only after the first mistake.
+     `:has()` is 2023-and-later; where it is missing the row still stays 46px, just with the
+     dots clipped, which is what shipped before this pass. */
+  #hud:has(.missChip.show) .dots{display:none;}
+  /* Why 419 and not 376: the original cut-off was measured on level 1, whose name
+     (· 初来乍到) is the *shortest* in the table. Re-swept against every shipped level in both
+     mistake-counter states, the name reappearing at 376 leaves too little room wherever it is
+     wide or the round dots are many — 三字经·对句 with a 💧 counter needs 417 wide before the
+     row fits again, so every width up to 416 gives it up, right across the iPhone 12/13/14
+     band. Verified 300-560px one pixel at a time, all 12 levels plus a review, with and
+     without the counter: 46px and nothing overhanging at every one. */
   .lvlChip .lname{display:none;}
   .lvlChip{padding:5px 9px;}
   .scoreChip{padding:5px 8px;}
@@ -341,7 +366,19 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 .helpCard{background:var(--paper);border:4px solid var(--ink);border-radius:26px;padding:18px 20px;width:min(400px,92vw);
   margin:auto;max-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;
   box-shadow:0 12px 0 rgba(43,58,85,.2);animation:cardIn .4s cubic-bezier(.34,1.56,.64,1);}
-.helpCard h3{font-family:var(--disp);font-size:26px;margin:0 0 12px;text-align:center;color:var(--teal);}
+/* The row that carries the title and the way out. The close button is absolutely placed inside
+   it rather than floated over the card, so it can never land on an instruction row however the
+   copy wraps — and because the head is its own flex row it stays visible at the top of the
+   scroll box without any sticky/position:fixed trickery on a scrolling container. */
+.helpHead{position:relative;display:flex;align-items:center;justify-content:center;margin:0 0 10px;}
+/* var(--ink) fill with --paper glyph = 11.4:1; the white-on-coral treatment the rest of the
+   buttons use would land back at 2.6:1 (see the Palette audit). */
+.helpX{position:absolute;right:-4px;top:50%;transform:translateY(-50%);width:44px;height:44px;
+  border-radius:50%;background:var(--ink);color:var(--paper);border:3px solid var(--ink);
+  font-size:20px;font-family:var(--disp);display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 0 rgba(43,58,85,.35);cursor:pointer;}
+.helpX:active{transform:translateY(calc(-50% + 3px));box-shadow:0 1px 0 rgba(43,58,85,.35);}
+.helpCard h3{font-family:var(--disp);font-size:26px;margin:0;text-align:center;color:var(--teal);}
 .helpRow{display:flex;align-items:center;gap:12px;margin:10px 0;}
 .helpRow .he{font-size:34px;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;
   border:3px solid var(--ink);flex:0 0 auto;}
@@ -546,7 +583,10 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 <!-- HELP MODAL -->
 <div id="modalHelp">
   <div class="helpCard">
-    <h3>怎么玩？</h3>
+    <div class="helpHead">
+      <h3>怎么玩？</h3>
+      <button class="helpX" id="btnHelpX" aria-label="关闭">✖</button>
+    </div>
     <div class="helpRow"><span class="he" style="background:var(--coral)">🔊</span><p>点喇叭，<b>听</b>一个汉字或词的声音。</p></div>
     <div class="helpRow"><span class="he" style="background:var(--teal)">👀</span><p>在飘动的泡泡里<b>找</b>出它，泡泡会轻轻碰撞、还会对你笑哦。</p></div>
     <div class="helpRow"><span class="he" style="background:var(--amber)">👆</span><p>点对了会夸你，点错了也会<b>读</b>给你听，再试试！</p></div>
@@ -1111,6 +1151,51 @@ function show(id){ $$('.screen').forEach(s=>s.classList.toggle('active',s.id===i
 $('#mImg1').src=MASCOT1; $('#mImg1').onerror=function(){this.style.display='none';};
 $('#mImg2').src=MASCOT2; $('#mImg2').onerror=function(){this.style.display='none';};
 
+/* ==== HELP START ==== */
+/* The 怎么玩/设置 modal had exactly one exit: 知道啦！, the *last* element in a card measured
+   at 615px tall inside a 568px viewport, so on a short phone the only way out was to scroll to
+   the bottom of a card with no other affordance anywhere in it. gemini.html dismissed its
+   settings on a backdrop tap, which is the gesture a child actually tries first, so that is
+   ported here — together with a ✖ pinned beside the title and Escape for whoever has a
+   keyboard. Opening it also stops the audio: 开始冒险 speaks 开始啦 and the neural clip runs
+   for a second or two with no 🔊 in the modal to explain it, so tapping ❓ left the child
+   changing a setting to a voice they could not hear any more. */
+const Help=(()=>{
+  let el=null, onOpen=null, onClose=null, isOpen=false;
+  // The class and the flag are both set *before* the hook runs, so a hook that throws cannot
+  // leave the two disagreeing — a modal the module believes is closed while it covers the
+  // screen would have no way back.
+  function open(){
+    if(!el)return false;
+    const fresh=!isOpen;
+    isOpen=true; el.classList.add('show');
+    if(fresh&&onOpen)onOpen();
+    return true;
+  }
+  function close(){
+    if(!el)return false;
+    const was=isOpen;
+    isOpen=false; el.classList.remove('show');
+    if(was&&onClose)onClose();
+    return true;
+  }
+  function shown(){ return isOpen; }
+  function attach(node,hooks){
+    el=node||null; onOpen=(hooks&&hooks.onOpen)||null; onClose=(hooks&&hooks.onClose)||null;
+    if(!el)return false;
+    // The `target===el` test is the whole point: a click on a settings row also bubbles here,
+    // and without it every tap on 慢/中/快 would close the modal instead of choosing a pace.
+    el.addEventListener('click',e=>{ if(e.target===el)close(); });
+    document.addEventListener('keydown',e=>{
+      if(!isOpen||e.key!=='Escape')return;
+      e.preventDefault(); close();
+    });
+    return true;
+  }
+  return {attach,open,close,shown};
+})();
+/* ==== HELP END ==== */
+
 /* ============ SETTINGS UI ============ */
 function syncToggles(){ $('#tglSfx').classList.toggle('off',!Store.sfx); $('#tglVoice').classList.toggle('off',!Store.voice);
   $('#tglSfx').querySelector('.ic').textContent=Store.sfx?'🔊':'🔇'; $('#tglVoice').querySelector('.ic').textContent=Store.voice?'🗣️':'🔕';
@@ -1131,8 +1216,10 @@ $('#tglSfx').onclick=()=>{ Store.setSfx(!Store.sfx); if(Store.sfx){SFX.ensure();
 $('#tglVoice').onclick=()=>{ Store.setVoice(!Store.voice); if(Store.voice){Voice.prime();Voice.speak('语音已打开');} syncToggles(); };
 $('#btnMute').onclick=()=>{ const anyOn=Store.sfx||Store.voice; Store.setSfx(!anyOn); Store.setVoice(!anyOn);
   if(!anyOn){SFX.ensure();SFX.click();Voice.prime();Voice.speak('声音打开啦');} syncToggles(); };
-$('#btnHelp').onclick=()=>{ syncToggles(); $('#modalHelp').classList.add('show'); };
-$('#btnHelpOk').onclick=()=>$('#modalHelp').classList.remove('show');
+Help.attach($('#modalHelp'),{ onOpen:()=>{ syncToggles(); Voice.stop(); }, onClose:()=>SFX.click() });
+$('#btnHelp').onclick=()=>Help.open();
+$('#btnHelpOk').onclick=()=>Help.close();
+$('#btnHelpX').onclick=()=>Help.close();
 // Warm the network TTS cache for a level's whole vocabulary while the child reads the intro.
 function prefetchLevel(cfg){
   if(!cfg)return;

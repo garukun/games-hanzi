@@ -415,13 +415,40 @@ test('a narrow viewport drops the level name rather than wrapping the header', (
   const i = src.indexOf('#hud{gap:5px;}');
   assert.ok(i > -1, 'the narrow-phone HUD block is missing');
   const head = src.slice(Math.max(0, i - 60), i);
-  assert.ok(/@media \(max-width:375px\)\{\s*$/.test(head),
-    'the HUD adaptation must stay gated on the narrow breakpoint: ' + JSON.stringify(head));
+  const m = /@media \(max-width:(\d+)px\)\{\s*$/.exec(head);
+  assert.ok(m, 'the HUD adaptation must stay gated on a breakpoint: ' + JSON.stringify(head));
+  // 376 was measured on level 1, whose name is the *shortest* in the table. Swept against
+  // every shipped level in both mistake states, a name wider than that reappears at 376 and
+  // the row no longer fits: 三字经·对句 with a 💧 counter needs 417 before it fits again, so
+  // 376 is the start of a 41px band — every iPhone 12/13/14 width — where the header overhung
+  // its own edge. tests/hud.test.js owns the structural half of this.
+  assert.ok(Number(m[1]) >= 417, `the breakpoint ${m[1]}px does not cover the 376-416 overflow band`);
   const block = slice(src, '#hud{gap:5px;}', '@keyframes scorePop{');
   assert.ok(/\.lvlChip \.lname\{display:none;\}/.test(block), block);
   // ...and it must not be the score chip that gets hidden.
   assert.ok(!/\.scoreChip\{display:none/.test(block), block);
   assert.ok(!/\.scoreChip #scoreN\{display:none/.test(block), block);
+});
+
+test('the level names the breakpoint was measured against are still the widest ones', () => {
+  // The breakpoint is a fixed pixel count standing in for "as wide as the widest level name".
+  // Nothing checks that relationship automatically, so pin the ground truth it was chosen from:
+  // if a level is ever given a longer name than these, the cut-off has to be re-measured.
+  const src = page();
+  // The pools and the level table are one lexical unit; take both or neither.
+  const start = src.indexOf('const A=s=>Array.from(s);');
+  const end = src.indexOf('\n];', src.indexOf('const LEVELS=[')) + 3;
+  assert.ok(start > -1 && end > start + 3, 'could not slice the data block');
+  const ctx = vm.createContext({});
+  vm.runInContext(src.slice(start, end), ctx, { filename: 'qwen.html#data' });
+  const data = vm.runInContext("LEVELS", ctx);
+  const names = data.map((L) => L.name);
+  assert.ok(names.every((n) => [...n].length <= 6), 'a level name is now wider than the ones measured: ' + names.join(','));
+  // The two levels that measured worst were the widest name *and* the most round dots, which is
+  // why the fix had to hide the name rather than shrink the dots.
+  const worst = data.filter((L) => [...L.name].length === 6);
+  assert.ok(worst.length >= 3, 'expected the three 6-character level names, got ' + worst.map((L) => L.name).join(','));
+  assert.ok(Math.max(...data.map((L) => L.rounds)) === 8, 'the busiest level is no longer 8 rounds');
 });
 
 test('the score chip and the level chip still share the chip look on a wide screen', () => {
