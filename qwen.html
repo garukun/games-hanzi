@@ -95,10 +95,15 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 /* ---------- LEVELS ---------- */
 #scr-levels{padding:10px clamp(10px,3vw,28px) 8px;}
 .mapHead{display:flex;align-items:center;gap:10px;padding:2px 4px 8px;}
+/* The title keeps its natural width and never wraps; the *chips* are the flexible ones, so if
+   a row ever does run out of space it is a number that clips rather than 选择关卡 stacking up
+   into four lines. Measured: with a flex:1 title, the 🏆 record chip pushed the header from
+   56px to 90px at 320px wide. */
+.mapHead h2{font-family:var(--disp);font-size:clamp(20px,5vw,30px);margin:0;flex:0 0 auto;white-space:nowrap;}
+.mapHead .chip{flex:0 1 auto;min-width:0;overflow:hidden;white-space:nowrap;}
 .iconBtn{width:46px;height:46px;border-radius:14px;background:var(--paper);border:3px solid var(--ink);font-size:20px;
   box-shadow:0 4px 0 rgba(43,58,85,.18);display:flex;align-items:center;justify-content:center;}
 .iconBtn:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(43,58,85,.18);}
-.mapHead h2{font-family:var(--disp);font-size:clamp(20px,5vw,30px);margin:0;flex:1;}
 .mapWrap{flex:1;display:flex;flex-direction:column;justify-content:space-around;gap:4px;overflow:hidden;}
 .mapRow{position:relative;}
 .chBanner{display:inline-flex;align-items:center;gap:6px;color:#fff;font-family:var(--disp);font-size:clamp(13px,3vw,17px);
@@ -118,6 +123,14 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 .stars{display:flex;gap:2px;}
 .stars i{font-size:clamp(11px,2.6vmin,15px);color:#cdd5e4;line-height:1;}
 .stars i.on{color:var(--gold);text-shadow:0 1px 0 #d8931f;}
+/* Best 得分 per level. gemini.html had a score but no storage, so it could not show a
+   record anywhere; this is the reason to replay a level you have already cleared. */
+.nodeBest{font-weight:800;font-size:clamp(9px,2.2vmin,12px);color:var(--ink2);line-height:1;
+  min-height:1em;font-variant-numeric:tabular-nums;}
+/* A fourth chip in this header squeezed 选择关卡 onto four lines at 320px (56px -> 90px of
+   header). The running total is the redundant one — every level already prints its own
+   record underneath its stars — so it is the thing that goes. */
+@media (max-width:375px){ #totalBest{display:none;} }
 .rowLink{text-align:center;color:var(--ink2);font-size:18px;animation:bobd 1.6s ease-in-out infinite;}
 
 /* ---------- GAME ---------- */
@@ -133,6 +146,25 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 .missChip{background:var(--paper);border:3px solid var(--ink);border-radius:14px;padding:4px 10px;font-weight:700;font-size:13px;
   box-shadow:0 3px 0 rgba(43,58,85,.18);display:none;}
 .missChip.show{display:inline-flex;gap:4px;align-items:center;}
+/* The live 得分 chip. tabular-nums stops the chip jittering wider as the digits grow, which
+   would otherwise shove the round dots sideways on every single tap. */
+.scoreChip{display:inline-flex;align-items:center;gap:3px;background:var(--gold);color:#fff;
+  box-shadow:0 4px 0 #d8931f;}
+.scoreChip #scoreN{min-width:2.4ch;text-align:right;font-variant-numeric:tabular-nums;}
+.scoreChip.pop{animation:scorePop .45s cubic-bezier(.34,1.56,.64,1);}
+.scoreChip.big{animation:scoreBig .5s cubic-bezier(.34,1.56,.64,1);}
+/* A fourth fixed-width chip in the HUD was enough to push the row onto three lines on a
+   narrow phone — measured: the header went from 46px to 116px at 320 and 360 wide, i.e. 70px
+   straight off the play area. The level *name* is the only thing in that row that can go, so
+   below 376px it does; the 得分 chip stays, because it is the thing that has to keep moving.
+   Swept 320/360/375/390/414/430/480 wide: the header is 46px at every one of them, same as
+   before the score chip existed. */
+@media (max-width:375px){
+  #hud{gap:5px;}
+  .lvlChip .lname{display:none;}
+  .lvlChip{padding:5px 9px;}
+  .scoreChip{padding:5px 8px;}
+}
 #promptCard{display:flex;align-items:center;gap:12px;background:var(--paper);border:3px solid var(--ink);border-radius:22px;
   padding:8px 12px;box-shadow:0 6px 0 rgba(43,58,85,.18);transition:background .3s;}
 #promptCard.reveal{background:#fff6d8;animation:revPop .4s ease;}
@@ -216,6 +248,8 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
   -webkit-text-stroke:1px rgba(43,58,85,.15);}
 .cSub{font-weight:700;color:var(--ink2);font-size:14px;}
 .cStars{display:flex;justify-content:center;gap:8px;margin:10px 0;}
+.cScore{font-weight:800;font-size:15px;color:var(--ink);margin:-4px 0 2px;font-variant-numeric:tabular-nums;}
+.cScore b{font-size:20px;color:var(--coral);}
 .cStar{font-size:46px;color:#dfe4ee;line-height:1;transform:scale(0);}
 .cStar.on{color:var(--gold);text-shadow:0 3px 0 #d8931f;animation:starPop .5s cubic-bezier(.34,1.56,.64,1) forwards;}
 .cStats{font-weight:700;color:var(--ink2);font-size:13px;margin-bottom:14px;}
@@ -250,9 +284,15 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 .cBtns{display:flex;flex-direction:column;gap:10px;}
 
 /* ---------- MODAL ---------- */
-#modalHelp{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:rgba(43,58,85,.5);padding:16px;}
+/* Same trap .clearCard already had, and the same fix: `align-items:center` + `overflow:auto`
+   clips an over-tall child at the TOP, where it can never be scrolled back to. Measured at
+   320x568: the card is 615px tall in a 568px viewport, so its title and first two instruction
+   rows were clipped and `知道啦！` sat 1px below the fold with nowhere to scroll — a child
+   could not get out of the help modal at all. */
+#modalHelp{position:fixed;inset:0;z-index:40;display:none;align-items:flex-start;justify-content:center;background:rgba(43,58,85,.5);padding:16px;}
 #modalHelp.show{display:flex;}
 .helpCard{background:var(--paper);border:4px solid var(--ink);border-radius:26px;padding:18px 20px;width:min(400px,92vw);
+  margin:auto;max-height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;
   box-shadow:0 12px 0 rgba(43,58,85,.2);animation:cardIn .4s cubic-bezier(.34,1.56,.64,1);}
 .helpCard h3{font-family:var(--disp);font-size:26px;margin:0 0 12px;text-align:center;color:var(--teal);}
 .helpRow{display:flex;align-items:center;gap:12px;margin:10px 0;}
@@ -303,6 +343,10 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 @keyframes cardIn{from{transform:scale(.7) translateY(20px);opacity:0}to{transform:scale(1) translateY(0);opacity:1}}
 @keyframes revPop{0%{transform:scale(.96)}50%{transform:scale(1.03)}100%{transform:scale(1)}}
 @keyframes cheer{0%{transform:scale(1)}30%{transform:scale(1.16)}100%{transform:scale(1)}}
+/* scorePop is the every-hit nudge; scoreBig is the streak payoff, so a longer streak is
+   visibly worth more rather than just numerically larger. */
+@keyframes scorePop{0%{transform:scale(1)}40%{transform:scale(1.12)}100%{transform:scale(1)}}
+@keyframes scoreBig{0%{transform:scale(1)}22%{transform:scale(1.34)}55%{transform:scale(.97)}100%{transform:scale(1)}}
 
 /* ---------- RESPONSIVE ---------- */
 @media (orientation:landscape) and (min-width:760px){
@@ -392,6 +436,7 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
       <button class="iconBtn" id="btnBackMap">🏠</button>
       <h2>选择关卡</h2>
       <span class="chip" id="totalWords" title="已经能认出的字词">📖 0 个</span>
+      <span class="chip" id="totalBest" title="所有关卡的历史最高总分">🏆 0</span>
       <span class="chip" id="totalStars">⭐ 0/36</span>
     </div>
     <div class="mapWrap" id="mapWrap"></div>
@@ -402,7 +447,8 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
     <div class="gameCol">
       <header id="hud">
         <button class="iconBtn" id="btnHome">🏠</button>
-        <span class="lvlChip" id="lvlChip">第1关</span>
+        <span class="lvlChip" id="lvlChip">第<span id="lvlNo">1</span>关<span class="lname" id="lvlName"></span></span>
+        <span class="lvlChip scoreChip" id="scoreChip">⭐<span id="scoreN">0</span></span>
         <div class="dots" id="dotsWrap"></div>
         <span class="missChip" id="missChip">💧<span id="missN">0</span></span>
         <button class="iconBtn" id="btnMute">🔊</button>
@@ -422,6 +468,7 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
         <div class="cTitle" id="cTitle">过关啦！</div>
         <div class="cSub" id="cSub">你是识字小明星</div>
         <div class="cStars" id="cStars"></div>
+        <div class="cScore" id="cScore">得分 <b>0</b></div>
         <div id="cLearned">
           <div class="clHead" id="cLearnHead">这一关学会了 <b id="cLearnN">0</b> 个</div>
           <div class="clGrid" id="cLearnGrid"></div>
@@ -880,11 +927,15 @@ const Pace=(()=>{
 
 /* ============ STORE ============ */
 const Store=(()=>{
-  const K='paopao-guoxue-v2'; let d={stars:{},known:{},sfx:true,voice:true,engine:'auto',speed:'normal',faces:'on',pace:'normal'};
+  const K='paopao-guoxue-v2'; let d={stars:{},known:{},best:{},sfx:true,voice:true,engine:'auto',speed:'normal',faces:'on',pace:'normal'};
   function load(){ try{const s=JSON.parse(localStorage.getItem(K)); if(s)d=Object.assign(d,s);}catch(e){} }
   function save(){ try{localStorage.setItem(K,JSON.stringify(d));}catch(e){} }
   load();
   if(!d.known||typeof d.known!=='object'||Array.isArray(d.known)) d.known={};
+  /* `best` is level id -> the highest 得分 that level has ever produced. gemini.html had a
+     score and no storage at all, so its number was worthless the moment the page reloaded;
+     persisting it is what turns a transient reward into something the level map can show. */
+  if(!d.best||typeof d.best!=='object'||Array.isArray(d.best)) d.best={};
   if(d.faces!=='on'&&d.faces!=='off') d.faces='on';
   if(!Pace.TIERS[d.pace]) d.pace=Pace.DEFAULT;   // a junk pace must not freeze the board
   /* `known` is word -> how many times the child has identified it. Stars only measure
@@ -898,10 +949,21 @@ const Store=(()=>{
     if(n)save();
     return n;
   }
-  return { get stars(){return d.stars;}, get known(){return d.known;}, get sfx(){return d.sfx;}, get voice(){return d.voice;},
+  /* Max-only, so a worse replay can never erase a better one. Returns whether this run
+     beat the record, which is the only thing the clear card needs to know. */
+  function setBest(id,n){
+    const v=Math.floor(Number(n));
+    if(!Number.isFinite(v)||v<=0)return false;
+    if(v>(d.best[id]||0)){ d.best[id]=v; save(); return true; }
+    return false;
+  }
+  return { get stars(){return d.stars;}, get known(){return d.known;}, get best(){return d.best;},
+    get sfx(){return d.sfx;}, get voice(){return d.voice;},
     get engine(){return d.engine;}, get speed(){return d.speed;}, get faces(){return d.faces;}, get pace(){return d.pace;},
-    markKnown,
+    markKnown, setBest,
     knownCount(){ return Object.keys(d.known).length; },
+    bestOf(id){ const v=Number(d.best[id]); return Number.isFinite(v)&&v>0?v:0; },
+    bestTotal(){ let t=0; for(const k in d.best){ const v=Number(d.best[k]); if(Number.isFinite(v)&&v>0)t+=v; } return t; },
     setStar(id,n){ d.stars[id]=Math.max(d.stars[id]||0,n); save(); },
     setSfx(v){d.sfx=v;save();}, setVoice(v){d.voice=v;save();},
     setEngine(v){d.engine=v;save();}, setSpeed(v){d.speed=v;save();}, setFaces(v){d.faces=(v==='off')?'off':'on';save();},
@@ -999,6 +1061,7 @@ function continueId(){ for(const L of LEVELS){ if(unlocked(L.id)&&(Store.stars[L
 function renderMap(){
   let total=0; LEVELS.forEach(L=>total+=(Store.stars[L.id]||0)); $('#totalStars').textContent='⭐ '+total+'/36';
   $('#totalWords').textContent='📖 '+Store.knownCount()+' 个';
+  $('#totalBest').textContent='🏆 '+Store.bestTotal();
   const wrap=$('#mapWrap'); wrap.innerHTML=''; const cur=continueId();
   CHAPTERS.forEach((ch,ci)=>{
     const row=document.createElement('div'); row.className='mapRow';
@@ -1015,10 +1078,11 @@ function renderMap(){
       else{ n.style.background=PAL[(L.id-1)%PAL.length]; n.innerHTML='<span class="nm">'+L.id+'</span>'; if(L.id===cur)n.classList.add('current'); }
       const sr=document.createElement('div'); sr.className='stars';
       for(let i=0;i<3;i++){ const s=document.createElement('i'); s.textContent='★'; if(i<st)s.classList.add('on'); sr.appendChild(s); }
+      const bs=document.createElement('div'); bs.className='nodeBest'; bs.textContent=ul?(Store.bestOf(L.id)||''):'';
       n.onclick=()=>{ if(!ul){ n.classList.add('shake'); setTimeout(()=>n.classList.remove('shake'),450); SFX.click();
         toast(inner.getBoundingClientRect().left+inner.clientWidth/2, n.getBoundingClientRect().top, '先过上一关哦','bad'); return; }
       SFX.click(); startLevel(L.id); };
-      w.appendChild(n); w.appendChild(sr); nodes.appendChild(w);
+      w.appendChild(n); w.appendChild(sr); w.appendChild(bs); nodes.appendChild(w);
     });
     inner.appendChild(nodes); row.appendChild(inner); wrap.appendChild(row);
     if(ci<CHAPTERS.length-1){ const lk=document.createElement('div'); lk.className='rowLink'; lk.textContent='﹀'; wrap.appendChild(lk); }
@@ -1184,6 +1248,45 @@ const Pulse=(()=>{
 })();
 /* ==== PULSE END ==== */
 
+/* ==== SCORE START ==== */
+/** A number that moves while you play.
+ *
+ *  gemini.html kept a live `⭐ n` in its header and ticked it up on every correct tap,
+ *  paying `10 + combo*5`. qwen had no score at all: the only in-play feedback was the
+ *  round dots, which move once per *round*, and the 💧 mistake chip, which only ever
+ *  goes up. On a 12-bubble phrase level a child can spend most of a round hunting with
+ *  nothing on screen confirming that the taps before this one counted.
+ *
+ *  Two deliberate differences from gemini's version:
+ *    1. the streak it pays for is the one qwen already tracks and already shows as 连对 ×N,
+ *       so the two rewards describe the same thing instead of competing with each other;
+ *    2. the bonus is `(streak-1)*STEP`, not `streak*STEP`. gemini paid 10 for the first
+ *       hit of a streak and 20 for the second, so the number leapt the moment a child got
+ *       lucky twice. A flat first step means the curve reads as "you're doing better"
+ *       rather than "something happened".
+ *
+ *  It is capped as well: levels 6-8 are two-target, so a clean run is a 14-hit streak and
+ *  an uncapped `streak*5` would pay 70 for the last tap alone. At the cap the bonus is 35,
+ *  so the last hits of a perfect run are worth about 4.5x the first — a legible ceiling.
+ *
+ *  Pure arithmetic plus one accumulator, no DOM, so tests/score.test.js runs it for real. */
+const Score=(()=>{
+  const BASE=10;        // a correct tap is worth this on its own
+  const STEP=5;         // ...plus this much for every extra hit in the same streak
+  const STREAK_CAP=8;   // longest clean run in the real data is 14; 8 keeps the payoff readable
+  let total=0;
+  /** A junk streak must never corrupt a run — it falls back to the plain BASE. */
+  function clamp(n){ const v=Number(n); if(!Number.isFinite(v))return 1;
+    return Math.max(1,Math.min(STREAK_CAP,Math.floor(v))); }
+  /** Points one correct tap is worth, given the streak it extends. Always >= BASE. */
+  function gain(streak){ const n=clamp(streak); return BASE+(n>1?(n-1)*STEP:0); }
+  function reset(){ total=0; }
+  /** Bank a correct tap and hand back what it was worth, so the caller can show the delta. */
+  function hit(streak){ const g=gain(streak); total+=g; return g; }
+  return {BASE,STEP,STREAK_CAP,gain,reset,hit,get value(){ return total; }};
+})();
+/* ==== SCORE END ==== */
+
 /* ============ GAME ENGINE ============ */
 let G=null; // game state
 function startLevel(id){
@@ -1191,9 +1294,11 @@ function startLevel(id){
   G={cfg,round:0,found:0,need:cfg.correct,mistakes:0,streak:0,maxStreak:0,start:Date.now(),
     bubbles:[],raf:0,sid:(G?G.sid+1:1),lock:true,prev:null,rt:null,W:0,H:0};
   Learned.reset();   // the clear card reports on the level just played, never on the previous one
+  Score.reset();     // ...and so must the 得分 chip, or it would carry the last level's total
   show('scr-game');
-  $('#lvlChip').textContent='第'+id+'关 · '+cfg.name;
+  $('#lvlNo').textContent=id; $('#lvlName').textContent=' · '+cfg.name;
   $('#missChip').classList.remove('show'); $('#missN').textContent='0';
+  paintScore(0,false);
   $('#clearOverlay').classList.remove('show');
   $('#comboChip').classList.remove('show');
   buildDots();
@@ -1338,12 +1443,18 @@ function tapBubble(b,clientX,clientY){
   smile(b);
   if(b.isTarget&&!b.found){
     b.found=true; b.dead=true; G.found++; G.streak++; G.maxStreak=Math.max(G.maxStreak,G.streak);
+    // gemini.html ticked a live `⭐ n` in the header on every correct tap and paid a bonus
+    // that grew with the streak. qwen tracked the streak and showed it as 连对 ×N but never
+    // paid it out, so there was nothing numeric moving between taps. The bonus now rides the
+    // same streak the combo chip already shows, so the two rewards cannot disagree.
+    const pts=Score.hit(G.streak);
+    paintScore(pts,G.streak>=2);
     vib(20); SFX.ding();
     const rc=b.el.getBoundingClientRect();
     toast(clientX,clientY-10,pick(PRAISE),'good');
     Confetti.burst(rc.left+rc.width/2,rc.top+rc.height/2,14,5);
     b.el.classList.add('burst'); G.bubbles=G.bubbles.filter(x=>x!==b);
-    showCombo();
+    showCombo(pts);
     // gemini.html's victory card named the word it had just asked for. qwen plays `rounds`
     // targets per level, so the port records every one of them and shows the whole list at
     // the end; on a two-target level each hit is its own entry rather than the round's.
@@ -1368,8 +1479,22 @@ function tapBubble(b,clientX,clientY){
     const mc=$('#missChip'); mc.classList.add('show'); $('#missN').textContent=G.mistakes;
   }
 }
-function showCombo(){ if(G.streak>=2){ const c=$('#comboChip'); c.textContent='连对 ×'+G.streak+' ⭐'; c.classList.remove('show'); void c.offsetWidth; c.classList.add('show'); } }
+/* The combo chip carries both halves of the reward — how long the streak is and what the
+   last tap was actually worth — so a child can see the bonus grow instead of inferring it
+   from a number that happened to jump. */
+function showCombo(pts){ if(G.streak>=2){ const c=$('#comboChip');
+    c.textContent='连对 ×'+G.streak+'  +'+Score.gain(G.streak)+'分'; c.classList.remove('show'); void c.offsetWidth; c.classList.add('show'); } }
 function hideCombo(){ $('#comboChip').classList.remove('show'); }
+/* Repaint the live 得分 chip. A streak payoff gets the bigger animation, so "worth more"
+   is a shape the eye catches as well as a number it can read. */
+function paintScore(pts,big){
+  const chip=$('#scoreChip'); if(!chip)return;
+  $('#scoreN').textContent=Score.value;
+  const cls=big?'big':'pop';
+  chip.classList.remove('pop','big'); void chip.offsetWidth; chip.classList.add(cls);
+  clearTimeout(paintScore.t);
+  paintScore.t=setTimeout(()=>chip.classList.remove('pop','big'),520);
+}
 /* Re-arm a tapped bubble's smile. Re-tapping restarts the timer rather than
    doing nothing, and a bubble that already burst must not be resurrected. */
 function smile(b){
@@ -1397,6 +1522,8 @@ function levelClear(){
   const secs=Math.max(1,Math.round((Date.now()-G.start)/1000));
   const stars=G.mistakes===0?3:G.mistakes<=2?2:1;
   Store.setStar(G.cfg.id,stars);
+  // Max-only, so replaying a level you have already aced can never lower your record.
+  const record=Store.setBest(G.cfg.id,Score.value);
   const ov=$('#clearOverlay');
   const last=G.cfg.id===LEVELS.length;
   $('#cTitle').textContent=last?'全部通关！🎉':'过关啦！';
@@ -1404,6 +1531,9 @@ function levelClear(){
   const cs=$('#cStars'); cs.innerHTML='';
   for(let i=0;i<3;i++){ const s=document.createElement('span'); s.className='cStar'; s.textContent='★';
     if(i<stars){ s.classList.add('on'); s.style.animationDelay=(0.3+i*0.35)+'s'; } cs.appendChild(s); }
+  $('#cScore').innerHTML=record
+    ? '得分 <b>'+Score.value+'</b> 🏆 新纪录！'
+    : '得分 <b>'+Score.value+'</b> · 最高 '+Store.bestOf(G.cfg.id);
   $('#cStats').textContent='用时 '+secs+' 秒 · 失误 '+G.mistakes+' 次 · 最高连对 '+G.maxStreak;
   renderLearned();
   $('#btnNext').style.display=last?'none':'flex';
