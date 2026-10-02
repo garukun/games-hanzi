@@ -12,6 +12,14 @@
 <style>
 :root{
   --ink:#2b3a55; --ink2:#5a6b88; --paper:#fffdf6;
+  /* --ink-2 is the "not available yet" grey, the third step of one hue (--ink -> --ink2 ->
+     --ink-2) so the level map stays a single family. Measured at 320x568 / 390x780 / 430x932 /
+     820x1180: 3.18:1 on the locked node's own fill, which is the surface the rim bounds. It is
+     NOT chosen against the page behind the node — the last chapter sits on the green hill and
+     no muted grey clears 3:1 there (#6b7488 is 1.90:1 on #62b857, and even --ink is only
+     4.63:1). No node in this game separates from the page by colour; the open rims bottom out
+     at 1.00:1 and the fills at 1.06:1, and the drop shadow is what draws the edge. */
+  --ink-2:#6b7488;
   /* Four of these eight were never checked against anything. --coral/--teal/--blue were
    * chosen as *fills* and then used as *text*, which is the trap: a mid-tone that carries a
    * white label at 2.25:1 (teal) also reads as 2.21:1 body text on the paper card behind it.
@@ -135,9 +143,35 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
   box-shadow:inset 0 -5px 10px rgba(255,255,255,.5),0 5px 0 rgba(43,58,85,.25),0 8px 14px rgba(43,58,85,.2);position:relative;transition:transform .1s;}
 .node:active{transform:translateY(3px);}
 /* A locked node is never given a scheme, so --bg/--bg2/--edge are unset on it and the
-   gradient/border in .node would fall back to initial values. Name all three here. */
-.node.locked{background:#cdd5e4!important;color:#8b94a7;border-color:#b0bacb;box-shadow:0 5px 0 rgba(43,58,85,.18);}
-.node.locked .lk{position:absolute;font-size:18px;}
+   gradient/border in .node would fall back to initial values. Name all three here.
+   The lock itself used to be the 🔒 emoji, which is a *colour bitmap*: it ignores `color`,
+   so nothing could be done about it. Measured in Chromium by isolating the glyph (screenshot,
+   empty the span, screenshot again, diff the changed pixels and score each against the pixel
+   behind it) it read 1.36:1 at the median and 2.62:1 at its best pixel — 0% of its own pixels
+   reached even 3:1, against the #cdd5e4 it sits on. It was the one glyph in the game carrying
+   information on its own (every other emoji has an ink number or word beside it) and it was
+   invisible. It is now drawn from --ink, which is 7.74:1 on that same fill and takes `color`.
+
+   The rim is DASHED where every open rim is solid, because the fill hue carries nothing:
+   #cdd5e4 is 1.13:1 to 1.31:1 from all seven unlocked bubble fills, so locked-vs-open was a
+   difference of about 1.0 in luminance — exactly the case the ★/☆ and ●/○ pairs hit, where
+   only a shape difference survives greyscale, sunlight and colour blindness.
+
+   --ink-2 is the rim colour: a third step of the hue this file already uses for "not yet"
+   (--ink -> --ink2 -> --ink-2), measured at 3.18:1 against the fill it bounds, where the old
+   #b0bacb managed 1.33:1. It is deliberately NOT chosen against the page behind the node —
+   the last chapter sits on the green hill and no muted grey clears 3:1 there (#6b7488 is
+   1.90:1 on #62b857, and even --ink is only 4.63:1). No node in this game separates from the
+   page by colour: measured at four viewports the open --edge rims run down to 1.00:1 against
+   the sky and the fills to 1.06:1, and the drop shadow is what draws the edge. */
+.node.locked{background:#cdd5e4!important;color:var(--ink-2);border-color:var(--ink-2);
+  border-style:dashed;box-shadow:0 5px 0 rgba(43,58,85,.18);}
+/* A padlock, drawn: a body and a shackle, both in --ink, both pure CSS so they take `color`
+   and so there is no font, no emoji bitmap and no platform to depend on. */
+.node.locked .lk{position:absolute;left:50%;top:52%;width:11px;height:9px;margin:-4.5px 0 0 -5.5px;
+  background:var(--ink);border-radius:2px;}
+.node.locked .lk::before{content:"";position:absolute;left:50%;top:-7px;transform:translateX(-50%);
+  width:8px;height:9px;border:2.5px solid var(--ink);border-bottom:none;border-radius:4px 4px 0 0;}
 .node.current{animation:nodePulse 1.6s ease-in-out infinite;}
 .node .nm{position:relative;z-index:1;}
 .stars{display:flex;gap:2px;}
@@ -1730,7 +1764,11 @@ function renderMap(){
       const w=document.createElement('div'); w.className='nodeWrap';
       const n=document.createElement('button'); n.className='node';
       const ul=unlocked(L.id); const st=Store.stars[L.id]||0;
-      if(!ul){ n.classList.add('locked'); n.innerHTML='<span class="lk">🔒</span>'; }
+      // The lock is a drawn shape, so it carries no text: it is aria-hidden, which means the
+      // button would otherwise announce itself as an empty control. Both branches therefore
+      // name themselves. The locked one used to announce "🔒", which was accidental at best.
+      n.setAttribute('aria-label', ul ? '第 '+L.id+' 关' : '第 '+L.id+' 关，未解锁');
+      if(!ul){ n.classList.add('locked'); n.innerHTML='<span class="lk" aria-hidden="true"></span>'; }
       else{ Palette.apply(n,Palette.at(L.id-1)); n.innerHTML='<span class="nm">'+L.id+'</span>'; if(L.id===cur)n.classList.add('current'); }
       const sr=document.createElement('div'); sr.className='stars';
       // An earned star is a filled ★ and an unearned one a hollow ☆, because the two colours
