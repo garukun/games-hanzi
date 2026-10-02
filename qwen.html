@@ -417,11 +417,14 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
     <div class="setRow"><span class="setLab">🐢 语速</span><div class="segs" id="optSpeed">
       <button class="seg" data-v="slow">慢</button><button class="seg" data-v="normal">正常</button>
     </div></div>
+    <div class="setRow"><span class="setLab">🌊 泡泡速度</span><div class="segs" id="optPace">
+      <button class="seg" data-v="slow">慢</button><button class="seg" data-v="normal">中</button><button class="seg" data-v="fast">快</button>
+    </div></div>
     <div class="setRow"><span class="setLab">🐻 泡泡脸</span><div class="segs" id="optFaces">
       <button class="seg" data-v="on">开</button><button class="seg" data-v="off">关</button>
     </div></div>
     <div class="helpNote"> 发音默认走「自动」：先尝试普通话神经网络人声，读不准时自动改用系统语音。
-      给小朋友玩时，请打开设备声音，并允许网页朗读语音。</div>
+      给小朋友玩时，请打开设备声音，并允许网页朗读语音。泡泡速度可以按孩子的反应调慢一点。</div>
     <button class="btn3d teal" id="btnHelpOk" style="width:100%">知道啦！</button>
   </div>
 </div>
@@ -793,18 +796,48 @@ const Voice=(()=>{
 })();
 /* ==== VOICE ENGINE END ==== */
 
+/* ==== PACE START ==== */
+/* Bubble movement speed. gemini.html:546 offered 慢/中/快 and it is the one *gameplay* setting
+   either version was missing — every other setting in this file is audio or decoration.
+   It turned out to be a real defect, not just a missing dial: instrumented on a 390x780 phone
+   viewport, the physics moved its bubbles at ~22 px/s, which is 0.37 px per frame — visually
+   frozen — and *zero* bubble pairs overlapped in five seconds, so the help modal's promise that
+   泡泡会轻轻碰撞 never actually happened. Tiers are multiples of the original viewport-derived
+   base, so they scale with the screen instead of being tuned against one device.
+   For scale: gemini's whole 慢/中/快 range worked out to ~58-282 px/s, i.e. its *slowest* was
+   livelier than this normal and roughly 3x its fastest. For a four-year-old tapping small
+   targets that is far too energetic to copy, which is why the dial beats a straight port. */
+const Pace=(()=>{
+  const DEFAULT='normal';
+  const TIERS={ slow:1.0, normal:2.8, fast:5.5 };  // measured ~21 / ~56 / ~100 px/s on a phone
+  const ORDER=['slow','normal','fast'];
+  /* The one formula behind the base speed, shared by the physics clamp and the spawn velocity
+     so the two can never drift apart. (The clamp reproduces qwen's original
+     clamp(minDim*0.05,20,42) exactly; only the tier multiplier is new.) */
+  function base(minDim){ return Math.max(20,Math.min(minDim*0.05,42)); }
+  /** Multiplier for a stored value. Junk falls back to normal rather than freezing the board. */
+  function mul(v){ return TIERS[v]||TIERS[DEFAULT]; }
+  /** The physics speed clamp for the current tier. Read every frame, so changing the setting
+      re-paces a level already in progress without a reload. */
+  function range(v,minDim){ const b=base(minDim)*mul(v); return {min:b*0.5,max:b*1.7}; }
+  return {TIERS,ORDER,DEFAULT,base,mul,range};
+})();
+/* ==== PACE END ==== */
+
 /* ============ STORE ============ */
 const Store=(()=>{
-  const K='paopao-guoxue-v2'; let d={stars:{},sfx:true,voice:true,engine:'auto',speed:'normal',faces:'on'};
+  const K='paopao-guoxue-v2'; let d={stars:{},sfx:true,voice:true,engine:'auto',speed:'normal',faces:'on',pace:'normal'};
   function load(){ try{const s=JSON.parse(localStorage.getItem(K)); if(s)d=Object.assign(d,s);}catch(e){} }
   function save(){ try{localStorage.setItem(K,JSON.stringify(d));}catch(e){} }
   load();
   if(d.faces!=='on'&&d.faces!=='off') d.faces='on';
+  if(!Pace.TIERS[d.pace]) d.pace=Pace.DEFAULT;   // a junk pace must not freeze the board
   return { get stars(){return d.stars;}, get sfx(){return d.sfx;}, get voice(){return d.voice;},
-    get engine(){return d.engine;}, get speed(){return d.speed;}, get faces(){return d.faces;},
+    get engine(){return d.engine;}, get speed(){return d.speed;}, get faces(){return d.faces;}, get pace(){return d.pace;},
     setStar(id,n){ d.stars[id]=Math.max(d.stars[id]||0,n); save(); },
     setSfx(v){d.sfx=v;save();}, setVoice(v){d.voice=v;save();},
-    setEngine(v){d.engine=v;save();}, setSpeed(v){d.speed=v;save();}, setFaces(v){d.faces=(v==='off')?'off':'on';save();} };
+    setEngine(v){d.engine=v;save();}, setSpeed(v){d.speed=v;save();}, setFaces(v){d.faces=(v==='off')?'off':'on';save();},
+    setPace(v){ d.pace=Pace.TIERS[v]?v:Pace.DEFAULT; save(); } };
 })();
 
 /* ============ CONFETTI ============ */
@@ -856,11 +889,13 @@ function syncToggles(){ $('#tglSfx').classList.toggle('off',!Store.sfx); $('#tgl
   $('#playArea').classList.toggle('noface',Store.faces==='off');
   $$('#optEngine .seg').forEach(b=>b.classList.toggle('on',b.dataset.v===Store.engine));
   $$('#optSpeed .seg').forEach(b=>b.classList.toggle('on',b.dataset.v===Store.speed));
-  $$('#optFaces .seg').forEach(b=>b.classList.toggle('on',b.dataset.v===Store.faces)); }
+  $$('#optFaces .seg').forEach(b=>b.classList.toggle('on',b.dataset.v===Store.faces));
+  $$('#optPace .seg').forEach(b=>b.classList.toggle('on',b.dataset.v===Store.pace)); }
 function wireSeg(id,get,set){ $$(id+' .seg').forEach(b=>{ b.onclick=()=>{ SFX.click(); set(b.dataset.v); syncToggles(); }; }); }
 wireSeg('#optEngine',()=>Store.engine,v=>Store.setEngine(v));
 wireSeg('#optSpeed',()=>Store.speed,v=>Store.setSpeed(v));
 wireSeg('#optFaces',()=>Store.faces,v=>Store.setFaces(v));
+wireSeg('#optPace',()=>Store.pace,v=>Store.setPace(v));
 $('#tglSfx').onclick=()=>{ Store.setSfx(!Store.sfx); if(Store.sfx){SFX.ensure();SFX.click();} syncToggles(); };
 $('#tglVoice').onclick=()=>{ Store.setVoice(!Store.voice); if(Store.voice){Voice.prime();Voice.speak('语音已打开');} syncToggles(); };
 $('#btnMute').onclick=()=>{ const anyOn=Store.sfx||Store.voice; Store.setSfx(!anyOn); Store.setVoice(!anyOn);
@@ -1075,7 +1110,8 @@ function nextRound(){
       ok=placed.every(p=>Math.hypot(p.x-x,p.y-y)>p.r+r+8); if(ok)break; }
     if(!ok){ x=r+Math.random()*(G.W-2*r); y=r+Math.random()*(G.H-2*r); }
     placed.push({x,y,r});
-    const ang=Math.random()*Math.PI*2; const base=clamp(Math.min(G.W,G.H)*0.05,20,42); const sp=base*(0.7+Math.random()*0.6);
+    const ang=Math.random()*Math.PI*2; const base=Pace.base(Math.min(G.W,G.H))*Pace.mul(Store.pace);
+    const sp=base*(0.7+Math.random()*0.6);
     const b={x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,r,fs,text:item.t,isTarget:item.t===targetText,found:false,dead:false,
       color:PAL[(item.i+idx)%PAL.length],d:(Math.random()*2).toFixed(2)};
     const sp2=Faces.pick(idx,prevFace); prevFace=sp2.id;
@@ -1130,7 +1166,10 @@ $('#btnHint').onclick=()=>{ if(!G)return; SFX.click(); const rt=G.rt;
 
 function tapBubble(b,clientX,clientY){
   if(G.lock||b.dead)return;
-  SFX.tap(); b.vy-=26; b.vx+=(Math.random()-.5)*20;
+  // The tap kick is scaled by the pace tier too, so a tapped bubble bounces by the same
+  // *proportion* of its drift whether the board is drifting slowly or quickly.
+  const kick=Pace.mul(Store.pace);
+  SFX.tap(); b.vy-=26*kick; b.vx+=(Math.random()-.5)*20*kick;
   Voice.speak(b.text,{interrupt:true});
   // gemini.html set a smileTimer on the tapped bubble; do the same with a class
   // so a wrong tap still gets the friendly "it's ok" reaction.
@@ -1218,12 +1257,15 @@ function loop(ts){
 }
 function step(dt){
   const bs=G.bubbles, W=G.W, H=G.H;
-  const minDim=Math.min(W,H); const base=clamp(minDim*0.05,20,42); const minS=base*0.5, maxS=base*1.7;
+  // Read the tier every frame: changing 泡泡速度 re-paces a level already in progress.
+  const minDim=Math.min(W,H); const rng=Pace.range(Store.pace,minDim); const minS=rng.min, maxS=rng.max;
+  // The random nudge is a fraction of the drift, so bubbles neither stall nor shoot straight.
+  const jit=rng.max*0.28;
   for(const b of bs){
     b.x+=b.vx*dt; b.y+=b.vy*dt;
     if(b.x-b.r<0){b.x=b.r;b.vx=Math.abs(b.vx)*0.96;} if(b.x+b.r>W){b.x=W-b.r;b.vx=-Math.abs(b.vx)*0.96;}
     if(b.y-b.r<0){b.y=b.r;b.vy=Math.abs(b.vy)*0.96;} if(b.y+b.r>H){b.y=H-b.r;b.vy=-Math.abs(b.vy)*0.96;}
-    b.vx+=(Math.random()-0.5)*16*dt; b.vy+=(Math.random()-0.5)*16*dt;
+    b.vx+=(Math.random()-0.5)*jit*dt; b.vy+=(Math.random()-0.5)*jit*dt;
     let sp=Math.hypot(b.vx,b.vy);
     if(sp<minS){ if(sp<0.01){const a=Math.random()*7;b.vx=Math.cos(a)*minS;b.vy=Math.sin(a)*minS;} else{b.vx*=minS/sp;b.vy*=minS/sp;} }
     else if(sp>maxS){ b.vx*=maxS/sp;b.vy*=maxS/sp; }
