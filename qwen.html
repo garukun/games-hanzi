@@ -88,8 +88,12 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
   padding:5px 12px;font-weight:700;font-size:13px;box-shadow:0 3px 0 rgba(43,58,85,.16);}
 .step .e{font-size:18px;}
 .arr{font-size:18px;color:var(--ink2);font-weight:900;}
-.deco{position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--disp);
-  opacity:.85;box-shadow:inset 0 -5px 10px rgba(0,0,0,.14),0 6px 14px rgba(43,58,85,.2);border:3px solid rgba(255,255,255,.7);
+/* The five floating characters on the title screen used to be white on the bright --teal /
+   --amber / --pink family, which measured 1.75–2.25:1 — the same defect the bubbles had.
+   They are painted from Palette in the logo block below, so this only declares the shape. */
+.deco{position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--ink);
+  font-family:var(--disp);background:radial-gradient(circle at 50% 58%,var(--bg),var(--bg2));
+  opacity:.9;box-shadow:inset 0 -5px 10px rgba(255,255,255,.5),0 6px 14px rgba(43,58,85,.2);border:3px solid var(--edge);
   pointer-events:none;z-index:1;animation:deco 9s ease-in-out infinite alternate;}
 
 /* ---------- LEVELS ---------- */
@@ -112,11 +116,14 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 .rowPath{position:absolute;inset:0;width:100%;height:100%;}
 .nodes{position:relative;display:flex;justify-content:space-between;align-items:flex-start;}
 .nodeWrap{display:flex;flex-direction:column;align-items:center;gap:3px;width:23%;}
-.node{width:clamp(48px,12vmin,68px);height:clamp(48px,12vmin,68px);border-radius:50%;border:3px solid var(--ink);
-  font-family:var(--disp);font-size:clamp(20px,5vmin,28px);color:#fff;display:flex;align-items:center;justify-content:center;
-  box-shadow:0 5px 0 rgba(43,58,85,.25),0 8px 14px rgba(43,58,85,.2);position:relative;transition:transform .1s;}
+.node{width:clamp(48px,12vmin,68px);height:clamp(48px,12vmin,68px);border-radius:50%;border:3px solid var(--edge);
+  font-family:var(--disp);font-size:clamp(20px,5vmin,28px);color:var(--ink);display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(circle at 50% 58%,var(--bg),var(--bg2));
+  box-shadow:inset 0 -5px 10px rgba(255,255,255,.5),0 5px 0 rgba(43,58,85,.25),0 8px 14px rgba(43,58,85,.2);position:relative;transition:transform .1s;}
 .node:active{transform:translateY(3px);}
-.node.locked{background:#cdd5e4!important;color:#8b94a7;box-shadow:0 5px 0 rgba(43,58,85,.18);}
+/* A locked node is never given a scheme, so --bg/--bg2/--edge are unset on it and the
+   gradient/border in .node would fall back to initial values. Name all three here. */
+.node.locked{background:#cdd5e4!important;color:#8b94a7;border-color:#b0bacb;box-shadow:0 5px 0 rgba(43,58,85,.18);}
 .node.locked .lk{position:absolute;font-size:18px;}
 .node.current{animation:nodePulse 1.6s ease-in-out infinite;}
 .node .nm{position:relative;z-index:1;}
@@ -190,15 +197,23 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
   border-radius:999px;padding:4px 12px;font-size:15px;box-shadow:0 4px 0 #c85389;opacity:0;transform:scale(.4);pointer-events:none;z-index:6;}
 #comboChip.show{animation:comboPop .4s cubic-bezier(.34,1.56,.64,1) forwards;}
 
-.bubble{position:absolute;left:0;top:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;
-  font-family:var(--disp);background:radial-gradient(circle at 32% 27%,rgba(255,255,255,.6),rgba(255,255,255,0) 44%),var(--c);
-  box-shadow:inset 0 -6px 12px rgba(0,0,0,.16),0 8px 16px rgba(43,58,85,.24);border:3px solid rgba(255,255,255,.8);
+/* A bubble is now a light sphere with a dark character, gemini.html's arrangement and the
+   one that measures: `ink` clears 4.5:1 against both stops of the fill. The white sheen at
+   32%/27% and the white inner glow at the bottom are both *lighter* than the fill, so the
+   darkest pixel the character can sit on is still bg2 — that is what lets ink be warm
+   rather than black. `--edge` replaces the old white rim, which was invisible on a light
+   bubble and now does the job of telling seven neighbouring bubbles apart. */
+.bubble{position:absolute;left:0;top:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--ink);
+  font-family:var(--disp);
+  background:radial-gradient(circle at 32% 27%,rgba(255,255,255,.78),rgba(255,255,255,0) 46%),
+    radial-gradient(circle at 50% 58%,var(--bg),var(--bg2));
+  box-shadow:inset 0 -8px 14px rgba(255,255,255,.5),0 8px 16px rgba(43,58,85,.26);border:3px solid var(--edge);
   touch-action:manipulation;cursor:pointer;will-change:transform;}
-.btxt{position:relative;line-height:1;white-space:nowrap;text-shadow:0 2px 0 rgba(0,0,0,.2);animation:bob 3.4s ease-in-out infinite alternate;animation-delay:var(--d,0s);}
+.btxt{position:relative;line-height:1;white-space:nowrap;text-shadow:0 1px 0 rgba(255,255,255,.65);animation:bob 3.4s ease-in-out infinite alternate;animation-delay:var(--d,0s);}
 .bubble.spawn{animation:spawnIn .5s cubic-bezier(.34,1.56,.64,1) backwards;animation-delay:var(--sd,0s);}
 .bubble.shake{animation:shk .45s;}
 .bubble.burst{animation:burst .55s ease-out forwards;pointer-events:none;}
-.bubble.burst::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:4px solid rgba(255,255,255,.85);animation:ringOut .5s ease-out;}
+.bubble.burst::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:4px solid var(--edge);animation:ringOut .5s ease-out;}
 .bubble.shrink{animation:shrink .3s ease-in forwards;pointer-events:none;}
 
 /* ---------- BUBBLE FACES ----------
@@ -208,8 +223,13 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
    changes. Silhouette comes from the .f-<species> class on the bubble; the
    colours are set as custom properties by the Faces module. */
 .face{position:absolute;inset:0;pointer-events:none;--ink:#33415c;--ear:#8a5a2b;--eye:var(--ink);--ring:transparent;--ringw:0;}
+/* Every species used to sit on a saturated bubble, where a dark ear was always visible.
+   On a light bubble the pale ones vanish — rabbit measured 1.00:1 and cat 1.13:1 against
+   the lightest fills, i.e. literally the same colour. drop-shadow (not box-shadow: the cat
+   ear is a clip-path polygon, which clips a box-shadow away) puts one soft ink halo around
+   whichever shape the species actually is, so every silhouette survives the new fill. */
 .face i{position:absolute;display:block;}
-.face .ear{width:26%;height:26%;top:-6%;background:var(--ear);}
+.face .ear{width:26%;height:26%;top:-6%;background:var(--ear);filter:drop-shadow(0 0 1.4px rgba(43,58,85,.6));}
 .face .ear.l{left:4%;border-radius:50%;}
 .face .ear.r{right:4%;border-radius:50%;}
 .face .eye{width:12%;height:12%;top:9%;border-radius:50%;background:var(--eye);box-shadow:0 0 0 var(--ringw) var(--ring);}
@@ -336,7 +356,10 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 @keyframes shrink{to{transform:var(--pos) scale(0);opacity:0}}
 @keyframes ring{0%{transform:scale(.8);opacity:.9}100%{transform:scale(1.7);opacity:0}}
 @keyframes dotPulse{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(255,107,94,.6)}50%{transform:scale(1.25);box-shadow:0 0 0 5px rgba(255,107,94,0)}}
-@keyframes nodePulse{0%,100%{box-shadow:0 5px 0 rgba(43,58,85,.25),0 0 0 0 rgba(255,107,94,.6)}50%{box-shadow:0 5px 0 rgba(43,58,85,.25),0 0 0 8px rgba(255,107,94,0)}}
+/* The keyframes own the whole box-shadow while they run, so they have to restate the new
+   light inset glow — otherwise the one node with a "play here" ring around it is the only
+   bubble on the map that is lit from below instead of above. */
+@keyframes nodePulse{0%,100%{box-shadow:inset 0 -5px 10px rgba(255,255,255,.5),0 5px 0 rgba(43,58,85,.25),0 0 0 0 rgba(229,83,74,.6)}50%{box-shadow:inset 0 -5px 10px rgba(255,255,255,.5),0 5px 0 rgba(43,58,85,.25),0 0 0 8px rgba(229,83,74,0)}}
 @keyframes comboPop{0%{opacity:0;transform:scale(.4)}60%{opacity:1;transform:scale(1.15)}100%{opacity:1;transform:scale(1)}}
 @keyframes toastUp{0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}25%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}40%{transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-130%) scale(1)}}
 @keyframes starPop{0%{transform:scale(0) rotate(-40deg)}70%{transform:scale(1.3) rotate(10deg)}100%{transform:scale(1) rotate(0)}}
@@ -423,11 +446,11 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
       <span class="step"><span class="e">👀</span>找一找</span><span class="arr">➜</span>
       <span class="step"><span class="e">👆</span>点一点</span>
     </div>
-    <div class="deco" style="top:18%;left:8%;width:54px;height:54px;font-size:26px;background:var(--teal);--d:0s">人</div>
-    <div class="deco" style="top:62%;left:6%;width:46px;height:46px;font-size:22px;background:var(--amber);animation-delay:1.2s">之</div>
-    <div class="deco" style="top:30%;right:9%;width:50px;height:50px;font-size:24px;background:var(--pink);animation-delay:.6s">学</div>
-    <div class="deco" style="top:70%;right:7%;width:44px;height:44px;font-size:20px;background:var(--blue);animation-delay:1.8s">善</div>
-    <div class="deco" style="top:46%;left:14%;width:40px;height:40px;font-size:18px;background:var(--green);animation-delay:2.4s">习</div>
+    <div class="deco" style="top:18%;left:8%;width:54px;height:54px;font-size:26px;--d:0s">人</div>
+    <div class="deco" style="top:62%;left:6%;width:46px;height:46px;font-size:22px;animation-delay:1.2s">之</div>
+    <div class="deco" style="top:30%;right:9%;width:50px;height:50px;font-size:24px;animation-delay:.6s">学</div>
+    <div class="deco" style="top:70%;right:7%;width:44px;height:44px;font-size:20px;animation-delay:1.8s">善</div>
+    <div class="deco" style="top:46%;left:14%;width:40px;height:40px;font-size:18px;animation-delay:2.4s">习</div>
   </section>
 
   <!-- LEVELS -->
@@ -519,7 +542,51 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const MASCOT1="https://image.qwenlm.ai/public_source/2f0f3c6b-c110-4748-948d-c597fb54d4a5/196327a83-302e-4d9d-92c8-c202ac32e5fa.png";
 const MASCOT2="https://image.qwenlm.ai/public_source/2f0f3c6b-c110-4748-948d-c597fb54d4a5/1b55f7954-9c32-4c14-9037-bc00deff724f.png";
-const PAL=['#ff6b5e','#ffb63d','#29c1b0','#4d9de0','#f27bae','#7cb518','#ff8f3f'];
+/* ==== PALETTE START ==== */
+/* Colour is not decoration here — the whole game is "read this character off this
+ * bubble". qwen painted saturated mid-tone bubbles and set the character in white,
+ * which measures 1.75:1 (amber) to 2.91:1 (blue) against the glyph: below the 3:1
+ * that WCAG asks of even a *graphic*, and far below the 4.5:1 a character needs to be
+ * named at a glance. gemini.html had the better of this by a wide margin — a light
+ * bubble with dark ink, up to 6.6:1 — so that is what is here.
+ *
+ * Each scheme is four colours:
+ *   bg/bg2  the light gradient the bubble is filled with; `ink` clears 4.5:1 against
+ *           *both* stops, so the character is legible wherever in the sphere it lands
+ *           (tests/palette.test.js recomputes the ratios, so a lazy edit fails the build)
+ *   edge    the saturated hue of the rim — what keeps seven bubbles tellable apart
+ *   ink     the character
+ *   mark    the same hue, darkened to clear 4.5:1 on the light *screen* background.
+ *           The logo and the confetti are drawn straight onto the sky/paper, not onto
+ *           a bubble, so they need a flat colour that stands on its own.
+ * The seven hue families are qwen's originals (coral/tangerine/amber/mint/sky/
+ * bubblegum/lime) in the same order, so the game's colour identity is unchanged —
+ * only the lightness structure is. */
+const Palette=(()=>{
+  const SCHEMES=[
+    {id:'coral',     bg:'#ffd9d4', bg2:'#ff8f85', edge:'#e5534a', ink:'#732a25', mark:'#9c3832'},
+    {id:'tangerine', bg:'#ffe4c2', bg2:'#ffc07a', edge:'#ef8b1f', ink:'#7e4910', mark:'#834c11'},
+    {id:'amber',     bg:'#fff0b8', bg2:'#ffd964', edge:'#d99b12', ink:'#7f5a0a', mark:'#75540a'},
+    {id:'mint',      bg:'#c9f4ee', bg2:'#74ddd2', edge:'#17a89a', ink:'#0d6058', mark:'#0e655d'},
+    {id:'sky',       bg:'#d3e6fb', bg2:'#8dc2f2', edge:'#2f7fd0', ink:'#1d4d7f', mark:'#225c96'},
+    {id:'bubblegum', bg:'#ffdcee', bg2:'#ffb0d5', edge:'#ec5f9c', ink:'#87375a', mark:'#933b61'},
+    {id:'lime',      bg:'#e4f4c6', bg2:'#b7dc7e', edge:'#6ba322', ink:'#406214', mark:'#416315'},
+  ];
+  const N=SCHEMES.length;
+  const byId={}; SCHEMES.forEach(s=>{ byId[s.id]=s; });
+  /** The scheme at a cyclic index. Junk collapses to the first rather than to undefined. */
+  function at(i){ const n=Number(i);
+    const k=Number.isFinite(n)?((Math.trunc(n)%N)+N)%N:0;
+    return SCHEMES[k]; }
+  /** The CSS custom properties for a scheme, ready for setProperty(). */
+  function vars(s){ return {'--bg':s.bg,'--bg2':s.bg2,'--edge':s.edge,'--ink':s.ink}; }
+  /** Write a scheme's four custom properties onto an element that reads them. */
+  function apply(el,s){ const v=vars(s); for(const k in v) el.style.setProperty(k,v[k]); return el; }
+  /** The flat, darkened hue — for glyphs and shapes drawn on the light screen background. */
+  function mark(i){ return at(i).mark; }
+  return {SCHEMES,N,byId,at,vars,apply,mark};
+})();
+/* ==== PALETTE END ==== */
 
 /* ============ DATA ============ */
 const PY={人:'rén',入:'rù',八:'bā',口:'kǒu',手:'shǒu',日:'rì',月:'yuè',山:'shān',水:'shuǐ',火:'huǒ',
@@ -977,7 +1044,7 @@ const Confetti=(()=>{
   size(); addEventListener('resize',size);
   function burst(x,y,n,spread){ for(let i=0;i<n;i++){ const a=Math.random()*Math.PI*2,sp=(spread||6)*(0.4+Math.random());
     parts.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-3,g:.18+Math.random()*.1,rot:Math.random()*6,vr:(Math.random()-.5)*.4,
-      c:PAL[(Math.random()*PAL.length)|0],s:5+Math.random()*6,life:1,dec:.012+Math.random()*.012,sh:Math.random()<.5?0:1}); }
+      c:Palette.mark((Math.random()*Palette.N)|0),s:5+Math.random()*6,life:1,dec:.012+Math.random()*.012,sh:Math.random()<.5?0:1}); }
     if(!raf)loop(); }
   function loop(){ c.clearRect(0,0,innerWidth,innerHeight);
     for(let i=parts.length-1;i>=0;i--){ const p=parts[i]; p.vy+=p.g; p.x+=p.vx; p.y+=p.vy; p.rot+=p.vr; p.life-=p.dec;
@@ -1002,10 +1069,13 @@ function toast(x,y,text,kind){ const t=document.createElement('div'); t.classNam
 /* ============ SCREENS ============ */
 function show(id){ $$('.screen').forEach(s=>s.classList.toggle('active',s.id===id)); }
 
-/* ============ LOGO ============ */
+/* ============ LOGO + TITLE-SCREEN DECOR ============ */
 (function(){ const name='泡泡国学堂'; const el=$('#logo');
-  name.split('').forEach((ch,i)=>{ const s=document.createElement('span'); s.textContent=ch; s.style.color=PAL[i%PAL.length];
+  name.split('').forEach((ch,i)=>{ const s=document.createElement('span'); s.textContent=ch; s.style.color=Palette.mark(i);
     s.style.setProperty('--rot',(i%2?5:-5)+'deg'); s.style.animationDelay=(i*.12)+'s'; el.appendChild(s); });
+  // The five floating characters are bubbles too, just decorative ones — same scheme, same
+  // ink, so they read as part of this game's furniture instead of white-on-bright stickers.
+  $$('.deco').forEach((d,i)=>Palette.apply(d,Palette.at(i+2)));
 })();
 $('#mImg1').src=MASCOT1; $('#mImg1').onerror=function(){this.style.display='none';};
 $('#mImg2').src=MASCOT2; $('#mImg2').onerror=function(){this.style.display='none';};
@@ -1075,7 +1145,7 @@ function renderMap(){
       const n=document.createElement('button'); n.className='node';
       const ul=unlocked(L.id); const st=Store.stars[L.id]||0;
       if(!ul){ n.classList.add('locked'); n.innerHTML='<span class="lk">🔒</span>'; }
-      else{ n.style.background=PAL[(L.id-1)%PAL.length]; n.innerHTML='<span class="nm">'+L.id+'</span>'; if(L.id===cur)n.classList.add('current'); }
+      else{ Palette.apply(n,Palette.at(L.id-1)); n.innerHTML='<span class="nm">'+L.id+'</span>'; if(L.id===cur)n.classList.add('current'); }
       const sr=document.createElement('div'); sr.className='stars';
       for(let i=0;i<3;i++){ const s=document.createElement('i'); s.textContent='★'; if(i<st)s.classList.add('on'); sr.appendChild(s); }
       const bs=document.createElement('div'); bs.className='nodeBest'; bs.textContent=ul?(Store.bestOf(L.id)||''):'';
@@ -1367,10 +1437,10 @@ function nextRound(){
     const ang=Math.random()*Math.PI*2; const base=Pace.base(Math.min(G.W,G.H))*Pace.mul(Store.pace);
     const sp=base*(0.7+Math.random()*0.6);
     const b={x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,r,fs,text:item.t,isTarget:item.t===targetText,found:false,dead:false,
-      color:PAL[(item.i+idx)%PAL.length],d:(Math.random()*2).toFixed(2)};
+      scheme:Palette.at(item.i+idx),d:(Math.random()*2).toFixed(2)};
     const sp2=Faces.pick(idx,prevFace); prevFace=sp2.id;
     b.face=sp2.id;
-    const el=document.createElement('button'); el.className='bubble spawn '+Faces.cls(sp2); el.style.setProperty('--c',b.color);
+    const el=document.createElement('button'); el.className='bubble spawn '+Faces.cls(sp2); Palette.apply(el,b.scheme);
     el.style.width=el.style.height=(2*r)+'px'; el.style.setProperty('--sd',(idx*0.04)+'s');
     el.style.setProperty('--pos','translate3d('+(x-r)+'px,'+(y-r)+'px,0)');
     el.style.transform='translate3d('+(x-r)+'px,'+(y-r)+'px,0)';

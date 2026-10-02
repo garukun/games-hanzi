@@ -20,6 +20,8 @@ const html = readFileSync(SRC, 'utf8');
 // The tests extract these blocks, so a missing marker means tests would silently
 // stop covering the shipped code.
 for (const marker of [
+  'PALETTE START',
+  'PALETTE END',
   'VOICE ENGINE START',
   'VOICE ENGINE END',
   'FACES START',
