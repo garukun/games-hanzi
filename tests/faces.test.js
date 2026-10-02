@@ -78,8 +78,13 @@ test('pick cycles the whole roster and never repeats the previous face', () => {
 test('pick survives negative, fractional and undefined indices', () => {
   const F = loadFaces();
   const ids = new Set(F.SPECIES.map((s) => s.id));
-  for (const i of [-1, -99, 0.4, NaN, undefined, null, 1e9]) {
+  // Infinity and -Infinity are in this list deliberately: `((Math.trunc(i)||0)%n+n)%n` lets them
+  // through, because `Infinity` is truthy so `||0` keeps it, and `Infinity % 5` is NaN — which
+  // indexes past the end of the roster and throws on `SPECIES[k].id`. NaN/undefined/null are all
+  // caught by the `||0`, so they never exercised the hole.
+  for (const i of [-1, -99, 0.4, NaN, undefined, null, 1e9, Infinity, -Infinity]) {
     assert.ok(ids.has(F.pick(i, null).id), `pick(${i}) returned an unknown species`);
+    assert.ok(ids.has(F.idFor(i, null)), `idFor(${i}) returned an unknown species`);
   }
   // An unknown previous id is ignored rather than throwing.
   assert.ok(ids.has(F.pick(0, 'dinosaur').id));

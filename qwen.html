@@ -237,6 +237,20 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 .hintBtn{width:clamp(42px,9.5vmin,52px);height:clamp(42px,9.5vmin,52px);border-radius:50%;background:var(--amber);border:3px solid var(--ink);
   font-size:clamp(20px,4.6vmin,26px);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 0 #d8931f;flex:0 0 auto;}
 .hintBtn:active{transform:translateY(3px);box-shadow:0 1px 0 #d8931f;}
+/* gemini.html put ⚙️ 设置 in its *game* header, so a child could change the voice, the pace
+   and the vocabulary bank without leaving the level. qwen's header cannot hold it: that row is
+   at capacity (tests/hud.test.js pins its six elements and the 419px breakpoint) and the round
+   dots are its one flexible item, so a seventh fixed-width control there either wraps the row
+   or starves them. The prompt card is the only fixed row on this screen with slack in it, and it
+   already holds the two controls a child needs *mid-round* — 🔊 replay, 💡 hint — so the settings
+   affordance joins them: one tap from anywhere in a level instead of 🏠 → 🏠 → ❓ → 开始.
+   Paper + ink rather than a saturated fill on purpose: the other two buttons are the child's
+   actions, this one is chrome, and a third candy-coloured circle would read as a third action.
+   Ink on paper is over 11:1, the same treatment the modal's ✖ already has. */
+.setBtn{width:clamp(34px,8vmin,44px);height:clamp(34px,8vmin,44px);border-radius:50%;background:var(--paper);
+  border:3px solid var(--ink);font-size:clamp(15px,3.4vmin,19px);display:flex;align-items:center;justify-content:center;
+  box-shadow:0 3px 0 rgba(43,58,85,.18);flex:0 0 auto;}
+.setBtn:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(43,58,85,.18);}
 #playArea{flex:1;position:relative;border-radius:24px;overflow:hidden;touch-action:none;
   background:radial-gradient(120% 80% at 50% 0%,rgba(255,255,255,.35),rgba(255,255,255,0) 60%);}
 #comboChip{position:absolute;top:8px;right:10px;background:var(--pink);color:#fff;font-family:var(--disp);border:3px solid var(--ink);
@@ -452,6 +466,29 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
   #promptCard{padding:5px 10px;gap:8px;}
   .pBig{font-size:clamp(18px,4vmin,26px);}
 }
+/* ---------- THE SETTINGS GEAR ON THE PROMPT CARD ----------
+   Below 419px the ⚙️ (see .setBtn) has to be paid for out of the prompt card, and it is paid
+   for out of the card's *chrome*, not out of its targets or the board. Measured in Chromium at
+   300/320/360/375/390/414 wide, in both round states and in the reveal state, against the
+   same page without the button:
+     card height  320px: 70 -> 66px   360: 70 -> 66   375: 70 -> 66   390/414: 70 -> 66
+     play area    +4px at every width from 320 up; +2px at 300, which is narrower than any
+                  phone this game ships a media query for.
+   Without this the instruction wraps: at 320 the text column is 126px and 听一听，找一找 needs
+   154px at 22px, which costs the board 24px — the same trap the HUD's 419px breakpoint exists
+   to avoid. Only the card's chrome gives ground. 🔊 (48px) and 💡 (42px) keep their measured
+   sizes because they are the two controls a child's finger hunts for mid-round; ⚙️ itself
+   bottoms out at 34px here, which is fine for a control a grown-up uses deliberately and is
+   recorded in tests/inset.test.js rather than left to chance.
+   This block sits *after* the max-height:560 one on purpose: a later rule of equal specificity
+   wins, and a 320x540 phone matches both queries, so putting it earlier would leave that device
+   on the other block's 8px gaps and 18px text — a mix that puts the reveal's reading on a
+   second line for no reason. */
+@media (max-width:419px){
+  #promptCard{gap:6px;padding:6px;}
+  .pBig{font-size:clamp(17px,5vw,22px);}
+  .pSub{font-size:clamp(10px,2.4vw,13px);}
+}
 </style>
 </head>
 <body>
@@ -548,6 +585,7 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
         <button class="speakBtn" id="btnSpeak">🔊</button>
         <div class="pMid"><div class="pBig" id="pBig">听一听，找一找</div><div class="pSub" id="pSub">找到读这个音的泡泡</div></div>
         <button class="hintBtn" id="btnHint">💡</button>
+        <button class="setBtn" id="btnSet" aria-label="设置">⚙</button>
       </div>
       <div id="playArea">
         <div id="comboChip"></div>
@@ -603,7 +641,8 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
       <button class="seg" data-v="on">开</button><button class="seg" data-v="off">关</button>
     </div></div>
     <div class="helpNote"> 发音默认走「自动」：先尝试普通话神经网络人声，读不准时自动改用系统语音。
-      给小朋友玩时，请打开设备声音，并允许网页朗读语音。泡泡速度可以按孩子的反应调慢一点。</div>
+      给小朋友玩时，请打开设备声音，并允许网页朗读语音。泡泡速度可以按孩子的反应调慢一点。
+      游戏里点题目右边的 <b>⚙️</b> 随时可以回到这里改，泡泡会先停下来等你们。</div>
     <button class="btn3d teal" id="btnHelpOk" style="width:100%">知道啦！</button>
   </div>
 </div>
@@ -1216,7 +1255,7 @@ $('#tglSfx').onclick=()=>{ Store.setSfx(!Store.sfx); if(Store.sfx){SFX.ensure();
 $('#tglVoice').onclick=()=>{ Store.setVoice(!Store.voice); if(Store.voice){Voice.prime();Voice.speak('语音已打开');} syncToggles(); };
 $('#btnMute').onclick=()=>{ const anyOn=Store.sfx||Store.voice; Store.setSfx(!anyOn); Store.setVoice(!anyOn);
   if(!anyOn){SFX.ensure();SFX.click();Voice.prime();Voice.speak('声音打开啦');} syncToggles(); };
-Help.attach($('#modalHelp'),{ onOpen:()=>{ syncToggles(); Voice.stop(); }, onClose:()=>SFX.click() });
+Help.attach($('#modalHelp'),{ onOpen:()=>{ syncToggles(); Voice.stop(); }, onClose:()=>{ SFX.click(); promptIfHeard(); } });
 $('#btnHelp').onclick=()=>Help.open();
 $('#btnHelpOk').onclick=()=>Help.close();
 $('#btnHelpX').onclick=()=>Help.close();
@@ -1383,10 +1422,13 @@ const Faces=(()=>{
   const KINDS=['round','tall','point','none'];
   const byId={}; SPECIES.forEach(s=>{ byId[s.id]=s; });
 
-  /** Cycle the roster so neighbouring bubbles never wear the same face. */
+  /** Cycle the roster so neighbouring bubbles never wear the same face.
+   *  The index is gated on Number.isFinite, not on truthiness: `((Math.trunc(i)||0)%n+n)%n`
+   *  lets Infinity through (`Infinity` is truthy, and `Infinity % 5` is NaN), which indexes
+   *  past the end of the roster and throws on `SPECIES[k].id`. Same guard Palette.at uses. */
   function pick(i,prevId){
-    const n=SPECIES.length;
-    let k=((Math.trunc(i)||0)%n+n)%n;
+    const n=SPECIES.length, v=Number(i);
+    let k=Number.isFinite(v)?((Math.trunc(v)%n)+n)%n:0;
     if(byId[prevId] && SPECIES[k].id===prevId) k=(k+1)%n;
     return SPECIES[k];
   }
@@ -1573,7 +1615,7 @@ function startLevel(id){
   const cfg=rev?Review.cfg(LEVELS,Review.type()):LEVELS.find(L=>L.id===id);
   if(!cfg){ show('scr-levels'); renderMap(); return; }
   G={cfg,round:0,found:0,need:cfg.correct,mistakes:0,streak:0,maxStreak:0,start:Date.now(),
-    bubbles:[],raf:0,sid:(G?G.sid+1:1),lock:true,prev:null,rt:null,W:0,H:0};
+    bubbles:[],raf:0,sid:(G?G.sid+1:1),lock:true,prev:null,rt:null,W:0,H:0,pausedMs:0};
   Learned.reset();   // the clear card reports on the level just played, never on the previous one
   Score.reset();     // ...and so must the 得分 chip, or it would carry the last level's total
   show('scr-game');
@@ -1673,7 +1715,7 @@ function nextRound(){
   });
   cardListen();
   const sid=G.sid;
-  setTimeout(()=>{ if(!G||G.sid!==sid)return; G.lock=false; speakTarget(); },650);
+  setTimeout(()=>{ if(!G||G.sid!==sid)return; G.lock=false; promptIfHeard(); },650);
 }
 
 /* The one place that owns the 🔊 speaking glow. `Pulse` decides *which* utterance may switch
@@ -1698,6 +1740,14 @@ function speakTarget(){
   if(!txt)return false;
   return sayNow(txt);
 }
+/* Speak the round's instruction, but only where it can be heard: it is normally fired 650ms
+ * after a round starts, and if the settings modal happens to be open then (the gear is one tap
+ * away, so this is easy to do) the clip would play behind the overlay with no 🔊 on screen to
+ * explain it. Holding it to the moment the modal closes is not only damage control — a child
+ * who has just had a grown-up switch 发音 or 语速 under them needs to be told the task again. */
+function promptIfHeard(){
+  if(G&&!G.lock&&G.rt&&!Help.shown())speakTarget();
+}
 function setSpeaking(v){ $('#btnSpeak').classList.toggle('speaking',v); }
 
 function cardListen(){
@@ -1719,6 +1769,12 @@ $('#btnHint').onclick=()=>{ if(!G)return; SFX.click(); const rt=G.rt;
   if(rt.type==='phrase'){ sayNow(rt.a+'，'+rt.b); $('#pSub').innerHTML='<span class="py">提示：'+rt.bpy+'</span>'; }
   else { sayNow(rt.text); $('#pSub').innerHTML='<span class="py">提示：'+rt.py+'</span>'; }
 };
+/* gemini.html carried ⚙️ 设置 in its game header, so the voice, the pace and the question type
+   were one tap away in the middle of a level. qwen's header has no room for it (tests/hud.test.js
+   pins its six elements), so the gear lives beside 🔊 and 💡 in the prompt card instead. `if(!G)`
+   because the button exists in the DOM before any level does, and Help.open() with no level
+   behind it would be a settings screen for a game that is not running. */
+$('#btnSet').onclick=()=>{ if(!G)return; SFX.click(); Help.open(); };
 
 function tapBubble(b,clientX,clientY){
   if(G.lock||b.dead)return;
@@ -1808,7 +1864,7 @@ function roundWin(){
 
 function levelClear(){
   cancelAnimationFrame(G.raf); G.raf=0;
-  const secs=Math.max(1,Math.round((Date.now()-G.start)/1000));
+  const secs=Math.max(1,Math.round(((Date.now()-G.start)-(G.pausedMs||0))/1000));
   const stars=G.mistakes===0?3:G.mistakes<=2?2:1;
   Store.setStar(G.cfg.id,stars);
   // Max-only, so replaying a level you have already aced can never lower your record.
@@ -1880,8 +1936,15 @@ $('#btnHome').onclick=()=>leaveGame();
 function loop(ts){
   if(!G){return;}
   if(!G._last)G._last=ts;
-  let dt=(ts-G._last)/1000; G._last=ts; dt=Math.min(dt,0.033);
-  step(dt); render();
+  const raw=(ts-G._last)/1000; G._last=ts;
+  /* Time spent with the settings modal open is not play. The board holds still so a child (or a
+     grown-up) who detours into 发音 or 语速 comes back to the board they left rather than one
+     that drifted while they were away, and the level clock stops so 用时 on the result card is
+     time actually played. The clock is read from the raw frame delta *before* the 33ms physics
+     clamp — clamping first would cap a 20-second pause at 33ms of credit. */
+  if(Help.shown())G.pausedMs=(G.pausedMs||0)+raw*1000;
+  else step(Math.min(raw,0.033));
+  render();
   G.raf=requestAnimationFrame(loop);
 }
 function step(dt){

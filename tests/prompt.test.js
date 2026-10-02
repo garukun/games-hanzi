@@ -156,8 +156,14 @@ test('speakTarget speaks the instruction, not the raw target', () => {
 test('both entry points into speakTarget get the instruction', () => {
   const src = page();
   // once when the round unlocks, once when the child taps the speaker
+  // The round's own prompt goes through promptIfHeard() rather than speakTarget() directly:
+  // the settings modal is reachable mid-round now (the ⚙️ in the prompt card), so the clip has
+  // to be held back when it would play behind the overlay.
   const round = src.slice(src.indexOf('function nextRound('), src.indexOf('function speakTarget('));
-  assert.ok(/speakTarget\(\)/.test(round), 'the round still reads its task aloud');
+  assert.ok(/promptIfHeard\(\)/.test(round), 'the round still reads its task aloud');
+  assert.ok(!/speakTarget\(\)/.test(round), 'the round speaks behind the settings modal');
+  const gate = src.slice(src.indexOf('function promptIfHeard('), src.indexOf('function setSpeaking('));
+  assert.ok(/!Help\.shown\(\)/.test(gate), gate);
   const btn = src.match(/#btnSpeak'\)\.onclick=[^\n]*/);
   assert.ok(btn && /speakTarget\(\)/.test(btn[0]), 'the 🔊 button replays the whole instruction');
 });

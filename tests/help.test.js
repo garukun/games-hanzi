@@ -270,7 +270,11 @@ test('the page attaches the module instead of poking the overlay class', () => {
 test('opening the modal stops the audio and syncs the settings; closing clicks', () => {
   const src = slice(page(), 'Help.attach($(\'#modalHelp\')', '\n');
   assert.ok(src.includes('onOpen:()=>{ syncToggles(); Voice.stop(); }'), src);
-  assert.ok(src.includes('onClose:()=>SFX.click()'), src);
+  // Closing clicks *and* hands the round's task back: the modal is now reachable in the middle
+  // of a level (the ⚙️ in the prompt card), so a child who has just had a grown-up switch 发音 or
+  // 语速 under them needs to be told what to do next. promptIfHeard() is a no-op on the title
+  // screen and while the round is still locked. See tests/inset.test.js.
+  assert.ok(src.includes('onClose:()=>{ SFX.click(); promptIfHeard(); }'), src);
 });
 
 test('the ✖ lives in the title row of the card, not floating over it', () => {
