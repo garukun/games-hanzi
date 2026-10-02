@@ -201,11 +201,14 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 #playArea.noface .face{display:none;}
 
 /* ---------- CLEAR ---------- */
-#clearOverlay{position:absolute;inset:0;z-index:20;display:none;align-items:center;justify-content:center;
-  background:rgba(43,58,85,.45);backdrop-filter:blur(2px);padding:16px;}
+#clearOverlay{position:absolute;inset:0;z-index:20;display:none;align-items:flex-start;justify-content:flex-start;
+  background:rgba(43,58,85,.45);backdrop-filter:blur(2px);padding:16px;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 #clearOverlay.show{display:flex;animation:fadeIn .3s ease;}
+/* margin:auto centres the card when it fits and lets it scroll from the top when it does not —
+   with align-items:center an over-tall card would have its first line clipped and unreachable. */
 .clearCard{background:var(--paper);border:4px solid var(--ink);border-radius:30px;padding:18px 22px 22px;text-align:center;
-  width:min(420px,92vw);box-shadow:0 12px 0 rgba(43,58,85,.2),0 24px 40px rgba(0,0,0,.3);animation:cardIn .5s cubic-bezier(.34,1.56,.64,1);}
+  width:min(420px,92vw);margin:auto;max-height:100%;overflow-y:auto;
+  box-shadow:0 12px 0 rgba(43,58,85,.2),0 24px 40px rgba(0,0,0,.3);animation:cardIn .5s cubic-bezier(.34,1.56,.64,1);}
 .cMascot{width:120px;height:120px;border-radius:50%;overflow:hidden;margin:0 auto;border:4px solid var(--ink);background:#fff3d6;position:relative;}
 .cMascot img{width:100%;height:100%;object-fit:cover;}
 .cMascot .fb{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:56px;}
@@ -216,6 +219,34 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 .cStar{font-size:46px;color:#dfe4ee;line-height:1;transform:scale(0);}
 .cStar.on{color:var(--gold);text-shadow:0 3px 0 #d8931f;animation:starPop .5s cubic-bezier(.34,1.56,.64,1) forwards;}
 .cStats{font-weight:700;color:var(--ink2);font-size:13px;margin-bottom:14px;}
+/* ---------- LEARNED WORDS (clear card) ---------- */
+#cLearned{margin:8px 0 10px;}
+.clHead{font-weight:800;font-size:12px;color:var(--ink2);margin:2px 0 5px;}
+.clHead b{color:var(--teal);}
+.clHead.again{color:var(--coral);}
+/* A phrase couplet with both readings is 6 characters plus 32 of pinyin, so the grid is
+   capped at two chips per row and allowed to scroll: a result card a six-year-old has to
+   scroll sideways is a worse result card. */
+.clGrid{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-height:min(28vh,150px);overflow-y:auto;
+  -webkit-overflow-scrolling:touch;}
+.wchip{font-family:var(--disp);font-size:17px;line-height:1;padding:7px 8px;border:3px solid var(--ink);
+  border-radius:14px;background:#fff;box-shadow:0 3px 0 rgba(43,58,85,.2);cursor:pointer;max-width:47%;
+  display:flex;flex-direction:column;align-items:center;gap:2px;}
+.wchip .wp{font-family:var(--body);font-size:9px;font-weight:700;color:var(--ink2);text-align:center;line-height:1.2;}
+.wchip:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(43,58,85,.2);}
+.wchip.speaking{background:var(--teal);color:#fff;}
+.wchip.speaking .wp{color:#e6fffb;}
+.wchip.again{background:#fff1e6;}
+/* A short phone (iPhone SE and friends) cannot afford a 120px mascot plus 46px stars plus
+   two word grids; give that space back to the result the child came for. */
+@media (max-height:640px){
+  .clearCard{padding:12px 16px 16px;}
+  .cMascot{width:80px;height:80px;}
+  .cMascot .fb{font-size:38px;}
+  .cStar{font-size:34px;}
+  .cTitle{font-size:26px;margin:4px 0 2px;}
+  .clGrid{max-height:min(24vh,120px);}
+}
 .cBtns{display:flex;flex-direction:column;gap:10px;}
 
 /* ---------- MODAL ---------- */
@@ -360,6 +391,7 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
     <div class="mapHead">
       <button class="iconBtn" id="btnBackMap">🏠</button>
       <h2>选择关卡</h2>
+      <span class="chip" id="totalWords" title="已经能认出的字词">📖 0 个</span>
       <span class="chip" id="totalStars">⭐ 0/36</span>
     </div>
     <div class="mapWrap" id="mapWrap"></div>
@@ -390,6 +422,12 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
         <div class="cTitle" id="cTitle">过关啦！</div>
         <div class="cSub" id="cSub">你是识字小明星</div>
         <div class="cStars" id="cStars"></div>
+        <div id="cLearned">
+          <div class="clHead" id="cLearnHead">这一关学会了 <b id="cLearnN">0</b> 个</div>
+          <div class="clGrid" id="cLearnGrid"></div>
+          <div class="clHead again" id="cMissHead" hidden>这些再练练 👇</div>
+          <div class="clGrid" id="cMissGrid"></div>
+        </div>
         <div class="cStats" id="cStats"></div>
         <div class="cBtns">
           <button class="btn3d coral" id="btnNext">下一关 ▶</button>
@@ -826,14 +864,28 @@ const Pace=(()=>{
 
 /* ============ STORE ============ */
 const Store=(()=>{
-  const K='paopao-guoxue-v2'; let d={stars:{},sfx:true,voice:true,engine:'auto',speed:'normal',faces:'on',pace:'normal'};
+  const K='paopao-guoxue-v2'; let d={stars:{},known:{},sfx:true,voice:true,engine:'auto',speed:'normal',faces:'on',pace:'normal'};
   function load(){ try{const s=JSON.parse(localStorage.getItem(K)); if(s)d=Object.assign(d,s);}catch(e){} }
   function save(){ try{localStorage.setItem(K,JSON.stringify(d));}catch(e){} }
   load();
+  if(!d.known||typeof d.known!=='object'||Array.isArray(d.known)) d.known={};
   if(d.faces!=='on'&&d.faces!=='off') d.faces='on';
   if(!Pace.TIERS[d.pace]) d.pace=Pace.DEFAULT;   // a junk pace must not freeze the board
-  return { get stars(){return d.stars;}, get sfx(){return d.sfx;}, get voice(){return d.voice;},
+  /* `known` is word -> how many times the child has identified it. Stars only measure
+     whether a level was cleared; this measures whether a word was actually learned, which
+     is the thing a literacy game is for. Counts, not a Set, so a re-play adds meaning. */
+  function markKnown(words){
+    if(!Array.isArray(words))return 0;
+    let n=0;
+    for(const w of words){ if(typeof w!=='string')continue; const k=w.trim(); if(!k)continue;
+      if(!(k in d.known))n++; d.known[k]=(d.known[k]||0)+1; }
+    if(n)save();
+    return n;
+  }
+  return { get stars(){return d.stars;}, get known(){return d.known;}, get sfx(){return d.sfx;}, get voice(){return d.voice;},
     get engine(){return d.engine;}, get speed(){return d.speed;}, get faces(){return d.faces;}, get pace(){return d.pace;},
+    markKnown,
+    knownCount(){ return Object.keys(d.known).length; },
     setStar(id,n){ d.stars[id]=Math.max(d.stars[id]||0,n); save(); },
     setSfx(v){d.sfx=v;save();}, setVoice(v){d.voice=v;save();},
     setEngine(v){d.engine=v;save();}, setSpeed(v){d.speed=v;save();}, setFaces(v){d.faces=(v==='off')?'off':'on';save();},
@@ -930,6 +982,7 @@ function unlocked(id){ return id===1 || (Store.stars[id-1]||0)>=1; }
 function continueId(){ for(const L of LEVELS){ if(unlocked(L.id)&&(Store.stars[L.id]||0)<3)return L.id; } return 12; }
 function renderMap(){
   let total=0; LEVELS.forEach(L=>total+=(Store.stars[L.id]||0)); $('#totalStars').textContent='⭐ '+total+'/36';
+  $('#totalWords').textContent='📖 '+Store.knownCount()+' 个';
   const wrap=$('#mapWrap'); wrap.innerHTML=''; const cur=continueId();
   CHAPTERS.forEach((ch,ci)=>{
     const row=document.createElement('div'); row.className='mapRow';
@@ -1036,12 +1089,70 @@ const Prompt=(()=>{
 })();
 /* ==== PROMPT END ==== */
 
+/* ==== LEARNED START ==== */
+/** What this level actually taught.
+ *
+ *  gemini.html's victory card named the one word it had just asked for
+ *  (`你学会了“${this.currentTarget}”！`). That was the best part of its result
+ *  screen — a literacy game that ends without naming what was learned is just
+ *  a bubble-popper — but gemini asks a single target per level, so one word is
+ *  all it could show. qwen plays `rounds` targets per level, so the faithful port
+ *  is the whole list.
+ *
+ *  Two lists come out of it: what the child got right, and what they never got
+ *  right (a wrong tap is recorded too, which turns the 💧 mistake counter from a
+ *  number into a list they can act on). Pure data — no DOM — so the tests can
+ *  run it for real. */
+const Learned=(()=>{
+  const MAX=24;              // a level tops out at 8 targets; the cap only guards a tap-happy child
+  const MAX_WORD=12;         // chips wider than this would break the clear card's layout
+  const MAX_PY=40;           // a phrase reading is `jiāng shàng táng → shēng bì yáng` — 32 in the real data
+  let rows=[];               // [{word,py,hits,missed}] in first-touch order
+  function reset(){ rows=[]; }
+  function fold(s){ return typeof s==='string' ? s.replace(/[\r\n]+/g,' ').trim() : ''; }
+  function clip(s,n){ const v=fold(s); return v.length>n?v.slice(0,n):v; }
+  function upsert(word,py){
+    const w=clip(word,MAX_WORD);
+    if(!w)return null;
+    for(let i=0;i<rows.length;i++)if(rows[i].word===w){
+      if(!rows[i].py&&py)rows[i].py=clip(py,MAX_PY);   // a later hit may carry a reading a miss could not
+      return rows[i];
+    }
+    if(rows.length>=MAX)return null;
+    const r={word:w,py:clip(py,MAX_PY),hits:0,missed:0}; rows.push(r); return r;
+  }
+  /** A correct tap: the round's target is now something the child can recognise.
+   *  Phrase rounds are recorded as the whole couplet (both halves plus both
+   *  readings), because 择邻处 alone is not what they learned — 昔孟母 ➜ 择邻处 is. */
+  function hit(rt){
+    if(!rt)return null;
+    if(rt.type==='phrase'){
+      const a=fold(rt.a), b=fold(rt.b);
+      if(!a||!b)return null;                     // half a couplet teaches nothing, so record nothing
+      const r=upsert(a+b,fold(rt.apy)+' → '+fold(rt.bpy)); if(r)r.hits++; return r;
+    }
+    const r=upsert(rt.text,rt.py); if(r)r.hits++; return r;
+  }
+  /** A wrong tap: this bubble is on the board and the child read it out, so it
+   *  is exactly the thing worth showing back to them. */
+  function missed(word,py){
+    const r=upsert(word,py); if(r)r.missed++; return r;
+  }
+  /** Anything the child never once got right. A word they found at least once is
+   *  already in the 学会 list and does not need repeating as homework. */
+  function struggled(){ return rows.filter(r=>r.hits===0&&r.missed>0).map(r=>Object.freeze(Object.assign({},r))); }
+  function words(){ return rows.filter(r=>r.hits>0).map(r=>Object.freeze(Object.assign({},r))); }
+  return {MAX,MAX_WORD,MAX_PY,reset,hit,missed,words,struggled,count(){ return rows.length; }};
+})();
+/* ==== LEARNED END ==== */
+
 /* ============ GAME ENGINE ============ */
 let G=null; // game state
 function startLevel(id){
   const cfg=LEVELS.find(L=>L.id===id);
   G={cfg,round:0,found:0,need:cfg.correct,mistakes:0,streak:0,maxStreak:0,start:Date.now(),
     bubbles:[],raf:0,sid:(G?G.sid+1:1),lock:true,prev:null,rt:null,W:0,H:0};
+  Learned.reset();   // the clear card reports on the level just played, never on the previous one
   show('scr-game');
   $('#lvlChip').textContent='第'+id+'关 · '+cfg.name;
   $('#missChip').classList.remove('show'); $('#missN').textContent='0';
@@ -1182,6 +1293,10 @@ function tapBubble(b,clientX,clientY){
     Confetti.burst(rc.left+rc.width/2,rc.top+rc.height/2,14,5);
     b.el.classList.add('burst'); G.bubbles=G.bubbles.filter(x=>x!==b);
     showCombo();
+    // gemini.html's victory card named the word it had just asked for. qwen plays `rounds`
+    // targets per level, so the port records every one of them and shows the whole list at
+    // the end; on a two-target level each hit is its own entry rather than the round's.
+    Learned.hit(G.rt);
     // gemini.html read a congratulation out loud on every correct tap; the toast above is
     // silent, so queue the spoken line behind the character (interrupt:false) instead of
     // letting it cut the pronunciation off. This replaces the line roundWin() used to
@@ -1192,6 +1307,10 @@ function tapBubble(b,clientX,clientY){
   } else if(!b.isTarget){
     G.mistakes++; G.streak=0; hideCombo();
     vib([60]); SFX.buzz();
+    // Record what they read instead. This is what turns the 💧 counter into a homework
+    // list at the end of the level — and on 形近字 levels (conf .85) the wrong bubble is
+    // usually a character that looks like the answer, so showing it back matters.
+    Learned.missed(b.text,pyOf(G.cfg.type,b.text));
     toast(clientX,clientY-10,'✗ '+pick(ENCO),'bad');
     b.el.classList.remove('shake'); void b.el.offsetWidth; b.el.classList.add('shake');
     setTimeout(()=>b.el&&b.el.classList.remove('shake'),500);
@@ -1235,12 +1354,39 @@ function levelClear(){
   for(let i=0;i<3;i++){ const s=document.createElement('span'); s.className='cStar'; s.textContent='★';
     if(i<stars){ s.classList.add('on'); s.style.animationDelay=(0.3+i*0.35)+'s'; } cs.appendChild(s); }
   $('#cStats').textContent='用时 '+secs+' 秒 · 失误 '+G.mistakes+' 次 · 最高连对 '+G.maxStreak;
+  renderLearned();
   $('#btnNext').style.display=last?'none':'flex';
   ov.classList.add('show');
   SFX.fanfare();
   setTimeout(()=>{ Confetti.burst(innerWidth*0.3,innerHeight*0.4,40,8); Confetti.burst(innerWidth*0.7,innerHeight*0.4,40,8); },150);
   setTimeout(()=>{ [0,1,2].forEach(i=>{ if(i<stars)setTimeout(()=>SFX.sparkle(),300+i*350); }); },300);
   renderMap();
+}
+/* The port of gemini.html's `你学会了“X”！`. Every word the child found this level
+   gets a chip; tap it and the neural voice reads it out again, so the result card
+   doubles as a revision card instead of a dead end. The 再练 grid holds the bubbles
+   they tapped that they never once got right. */
+function renderLearned(){
+  const got=Learned.words(), bad=Learned.struggled();
+  $('#cLearnN').textContent=got.length;
+  $('#cLearnHead').hidden=!got.length;
+  $('#cMissHead').hidden=!bad.length;
+  fillChips($('#cLearnGrid'),got,false);
+  fillChips($('#cMissGrid'),bad,true);
+  Store.markKnown(got.map(r=>r.word));   // progress beyond stars: what the child can now read
+}
+function fillChips(box,rows,again){
+  box.innerHTML='';
+  for(const r of rows){
+    const b=document.createElement('button');
+    b.className='wchip'+(again?' again':''); b.type='button';
+    b.appendChild(document.createTextNode(r.word));
+    if(r.py){ const p=document.createElement('span'); p.className='wp'; p.textContent=r.py; b.appendChild(p); }
+    b.onclick=()=>{ SFX.click(); Voice.speak(r.word,{interrupt:true});
+      box.querySelectorAll('.wchip.speaking').forEach(c=>c.classList.remove('speaking'));
+      b.classList.add('speaking'); setTimeout(()=>b.classList.remove('speaking'),1200); };
+    box.appendChild(b);
+  }
 }
 $('#btnNext').onclick=()=>{ const nid=G.cfg.id+1; if(LEVELS.find(L=>L.id===nid))startLevel(nid); else{show('scr-levels');} };
 $('#btnReplay').onclick=()=>startLevel(G.cfg.id);

@@ -30,6 +30,8 @@ for (const marker of [
   'PROMPT END',
   'PACE START',
   'PACE END',
+  'LEARNED START',
+  'LEARNED END',
 ]) {
   if (!html.includes(marker)) {
     console.error(`build: ${SRC} is missing the "${marker}" marker that the tests rely on`);
