@@ -141,12 +141,14 @@ test('an unknown round type falls back to the find wording rather than silence',
 test('speakTarget speaks the instruction, not the raw target', () => {
   const src = page();
   const fn = src.slice(src.indexOf('function speakTarget('), src.indexOf('function setSpeaking('));
-  assert.ok(/Prompt\.say\(G\.rt\)/.test(fn), 'speakTarget must go through Prompt.say');
+  assert.ok(/Prompt\.say\(G&&G\.rt\)/.test(fn), 'speakTarget must go through Prompt.say');
   assert.ok(!/rt\.a:rt\.text/.test(fn), 'the old bare-target read-aloud is gone');
   // Silence must stay silent: an empty instruction must not poke the speaker button on.
-  assert.ok(/if\(!txt\)return;/.test(fn), 'a junk round target must not speak or pulse');
+  assert.ok(/if\(!txt\)return false;/.test(fn), 'a junk round target must not speak or pulse');
+  // sayNow owns the pulse now, so the bail must come before it rather than before a
+  // setSpeaking(true) that no longer lives in this function.
   assert.ok(
-    fn.indexOf('if(!txt)return;') < fn.indexOf('setSpeaking(true)'),
+    fn.indexOf('if(!txt)return false;') < fn.indexOf('return sayNow(txt);'),
     'bail before the speaker starts pulsing',
   );
 });
@@ -165,7 +167,7 @@ test('the hint keeps speaking the bare target — it is a hint, not a task', () 
   const hint = src.slice(src.indexOf("$('#btnHint').onclick="), src.indexOf('function tapBubble('));
   assert.ok(hint.length, 'btnHint handler not found');
   assert.ok(!hint.includes('Prompt.say'), 'a hint prefixed with 请找到 teaches the wrong lesson');
-  assert.ok(/Voice\.speak\(rt\.text/.test(hint), 'the character itself is still read aloud');
+  assert.ok(/sayNow\(rt\.text\)/.test(hint), 'the character itself is still read aloud');
 });
 
 /* ------------------------------------------------------------------ *

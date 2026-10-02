@@ -578,19 +578,105 @@ test('whitespace-only text is ignored and never hits the endpoint', async () => 
   assert.strictEqual(h.Audio.created.length, 0);
 });
 
-test('speaking text never outlives an interrupt (stale onend is swallowed)', async () => {
+test('an interrupt settles the utterance it displaces — exactly once, never twice', async () => {
+  // `onend` means "I am done talking", not "I played to the end of the text". The 🔊
+  // speaking glow is switched off by nothing else, so dropping it on an interrupt latched
+  // the button on forever (reproduced in Chromium). A late `ended` from the displaced clip
+  // must still not report a *second* completion.
   const h = loadEngine();
   const fired = [];
   h.Voice.speak('父', { onend: () => fired.push('父') });
   await settle(h);
   h.Voice.speak('母', { interrupt: true, onend: () => fired.push('母') });
   await settle(h);
+  assert.deepStrictEqual(fired, ['父'], 'the displaced utterance was never told it was done');
   h.Audio.created[0].finish(); // the superseded clip reports ending late
   await settle(h);
-  assert.deepStrictEqual(fired, [], 'the superseded utterance reported completion');
+  assert.deepStrictEqual(fired, ['父'], 'a stale clip must not settle anything a second time');
   h.Audio.created[1].finish();
   await settle(h);
-  assert.deepStrictEqual(fired, ['母'], 'the live utterance never completed');
+  assert.deepStrictEqual(fired, ['父', '母'], 'the live utterance never completed');
+});
+
+test('a late clip cannot settle the utterance that replaced it', async () => {
+  const h = loadEngine();
+  const fired = [];
+  h.Voice.speak('父', { onend: () => fired.push('父') });
+  await settle(h);
+  h.Voice.speak('母', { interrupt: true, onend: () => fired.push('母') });
+  await settle(h);
+  assert.deepStrictEqual(fired, ['父']);
+  // 父's audio element fires `ended` after 母 is already playing. Only the item that holds
+  // the play claim may release it, otherwise the queue would let a third clip start early.
+  h.Audio.created[0].finish();
+  await settle(h);
+  assert.deepStrictEqual(fired, ['父'], '母 must not be settled by 父 arriving late');
+  assert.strictEqual(h.Audio.created.length, 2, 'a third clip started while 母 was still playing');
+  h.Audio.created[1].finish();
+  await settle(h);
+  assert.deepStrictEqual(fired, ['父', '母']);
+});
+
+test('stop() settles the utterance in flight so a mute cannot strand the glow', async () => {
+  const h = loadEngine();
+  const fired = [];
+  h.Voice.speak('父', { onend: () => fired.push('父') });
+  await settle(h);
+  h.Voice.stop();
+  assert.deepStrictEqual(fired, ['父'], 'stop() left the caller waiting forever for onend');
+  // ...and turning the voice off goes through stop().
+  h.Voice.speak('母', { onend: () => fired.push('母') });
+  await settle(h);
+  h.Voice.setOn(false);
+  assert.deepStrictEqual(fired, ['父', '母'], 'muting mid-utterance stranded the caller');
+});
+
+test('stop() settles queued (not yet started) utterances too', async () => {
+  const h = loadEngine();
+  const fired = [];
+  h.Voice.speak('父', { onend: () => fired.push('父') });
+  await settle(h);
+  h.Voice.speak('母', { interrupt: false, onend: () => fired.push('母') });
+  await settle(h);
+  assert.deepStrictEqual(fired, [], '母 was queued behind 父');
+  h.Voice.stop();
+  assert.ok(fired.includes('父'), 'the in-flight utterance was not settled');
+  assert.ok(!fired.includes('母'), 'a queued utterance was dropped without being settled');
+});
+
+test('a throwing onend cannot wedge the queue or throw out of stop()', async () => {
+  const h = loadEngine();
+  h.Voice.speak('父', { onend: () => { throw new Error('caller blew up'); } });
+  await settle(h);
+  h.Voice.speak('母', { interrupt: true, onend: () => {} });
+  await settle(h);
+  assert.doesNotThrow(() => h.Voice.stop());
+  h.Voice.speak('兄', { onend: () => {} });
+  await settle(h);
+  assert.ok(h.Audio.created.length >= 3, 'the engine stopped accepting work after a caller threw');
+});
+
+test('busy tracks the in-flight claim, and is false on a device that cannot speak', async () => {
+  const h = loadEngine();
+  assert.strictEqual(h.Voice.busy, false, 'nothing is playing yet');
+  h.Voice.speak('父', { onend: () => {} });
+  assert.strictEqual(h.Voice.busy, true, 'the utterance took the claim synchronously');
+  await settle(h);
+  h.Audio.created[0].finish();
+  await settle(h);
+  assert.strictEqual(h.Voice.busy, false, 'the claim was released when the clip ended');
+});
+
+test('busy is false when the local engine has no speechSynthesis to fall back on', async () => {
+  // This is the case that would latch a "speaking" glow: the item is settled synchronously
+  // inside speak(), so the caller's onend runs *before* it decides to switch the glow on.
+  const h = loadEngine({ noSynth: true });
+  h.Voice.setEngine('local');
+  const fired = [];
+  h.Voice.speak('父', { onend: () => fired.push('父') });
+  await settle(h);
+  assert.strictEqual(h.Voice.busy, false, 'a device that can speak nothing must report idle');
+  assert.deepStrictEqual(fired, ['父'], 'and it must still settle the caller synchronously');
 });
 
 /* ------------------------------------------------------------------ *

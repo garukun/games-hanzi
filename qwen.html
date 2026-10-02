@@ -612,6 +612,7 @@ const Voice=(()=>{
   let epoch=0;                  // bumped on interrupt so stale items are dropped
   let queue=[];
   let playing=false;
+  let current=null;             // the item holding the play claim, so stop() can settle it
   let primed=false;
   let preCount=0, preTimer=0;
   let lastProvider=null;        // provider that carried the most recent clip
@@ -737,7 +738,9 @@ const Voice=(()=>{
       });
     };
     // Always release the claim, even for a superseded item, or the queue deadlocks.
-    const done=()=>{ playing=false; if(item.e!==epoch)return; item.onend&&item.onend(); pump(); };
+    // Only the item that actually holds it may clear `current`: a clip that was displaced
+    // and then fires `onended` late must not settle the utterance that replaced it.
+    const done=()=>{ if(current===item){ playing=false; current=null; } if(item.e!==epoch)return; item.onend&&item.onend(); pump(); };
     step();
   }
 
@@ -745,7 +748,7 @@ const Voice=(()=>{
     if(!SYNTH)return false;
     try{
       const parts=chunk(item.text); let i=0;
-      const finish=()=>{ playing=false; if(item.e!==epoch)return; item.onend&&item.onend(); pump(); };
+      const finish=()=>{ if(current===item){ playing=false; current=null; } if(item.e!==epoch)return; item.onend&&item.onend(); pump(); };
       const step=()=>{
         if(item.e!==epoch||!on)return finish();
         if(i>=parts.length)return finish();
@@ -768,16 +771,24 @@ const Voice=(()=>{
       const item=queue.shift();
       if(item.e!==epoch||!on)continue;         // superseded while waiting its turn
       playing=true;                            // claim synchronously: a load is in flight
+      current=item;
       const useNet=engine==='neural'||(engine==='auto'&&netFail<NET_GIVEUP);
       if(useNet)return playNeural(item,chunk(item.text));
       if(localSpeak(item))return;
-      playing=false;                           // nothing on this device can speak it
+      playing=false; current=null;              // nothing on this device can speak it
       item.onend&&item.onend();
     }
   }
 
+  /* An interrupt has to settle whatever it displaces. `onend` means "I am done talking",
+   not "I played to the end of the text" — every caller in this page uses it to clear the
+   🔊 speaking indicator, so dropping it on an interrupt leaves that button pulsing forever.
+   Firing it here (after the epoch bump, so the displaced item's own handlers bail out) keeps
+   the caller's promise without letting a stale clip resume. */
   function stop(){
     epoch++; queue=[]; playing=false;
+    const dropped=current; current=null;
+    if(dropped&&dropped.onend){ try{ dropped.onend(); }catch(e){} }
     for(const k of cache.keys()){ const a=cache.get(k); try{ a.pause(); }catch(e){} }
     if(SYNTH){ try{ SYNTH.cancel(); }catch(e){} }
   }
@@ -815,6 +826,11 @@ const Voice=(()=>{
       queue.push({text:s,onend:opt.onend,rate:opt.rate,pitch:opt.pitch,e:epoch});
       pump();
     },
+    // Is an utterance actually going to make sound right now? False when nothing on this
+    // device can speak the text (local engine, no speechSynthesis at all) — the caller uses
+    // this to avoid showing a "speaking" indicator for a clip that will never play, which
+    // would otherwise latch on with no callback ever due to clear it.
+    get busy(){ return playing; },
     prefetch, prime, stop,
     setOn(v){ if(on===v)return; on=v; if(!v)stop(); },
     get on(){ return on; },
@@ -1146,6 +1162,28 @@ const Learned=(()=>{
 })();
 /* ==== LEARNED END ==== */
 
+/* ==== PULSE START ==== */
+/** Who owns the 🔊 "speaking" glow.
+ *
+ *  The glow is driven entirely by Voice's `onend` callback, but an utterance can end three
+ *  ways: it finishes, something interrupts it, or it is displaced before it even starts.
+ *  A plain boolean therefore has a race in it — the interrupted clip's callback fires *after*
+ *  the replacement has already switched the glow on, and switches it back off while the new
+ *  clip is still playing (or, before this existed, never fires at all and the glow latches on
+ *  forever). A generation counter settles it: only the newest utterance may switch the glow
+ *  off, and everything older is simply ignored.
+ *
+ *  Pure data, so tests/pulse.test.js can run it without a DOM. */
+const Pulse=(()=>{
+  let gen=0;                    // bumped per begin(); monotone, never reset
+  /** Claim ownership of the glow for a new utterance and return its token. */
+  function begin(){ return ++gen; }
+  /** May this token switch the glow off? Only the newest one may. */
+  function owns(token){ return token===gen; }
+  return {begin,owns};
+})();
+/* ==== PULSE END ==== */
+
 /* ============ GAME ENGINE ============ */
 let G=null; // game state
 function startLevel(id){
@@ -1244,11 +1282,27 @@ function nextRound(){
   setTimeout(()=>{ if(!G||G.sid!==sid)return; G.lock=false; speakTarget(); },650);
 }
 
+/* The one place that owns the 🔊 speaking glow. `Pulse` decides *which* utterance may switch
+   it off, so an interrupted prompt can no longer either latch the glow on forever or switch
+   it off underneath the utterance that replaced it. Claiming the token before Voice.speak()
+   matters: speak() may synchronously settle the item it displaces. */
+function sayNow(text){
+  if(typeof text!=='string'||!text.trim())return false;   // nothing to say: never leave a glow on
+  const tok=Pulse.begin();
+  const clear=()=>{ if(Pulse.owns(tok))setSpeaking(false); };
+  if(!Voice.on){ clear(); return true; }   // muted: Voice.speak would call back synchronously, and
+                                           // an explicit check beats guessing at a timeout
+  Voice.speak(text,{onend:clear});
+  // After speak(), which may synchronously settle the item it displaces. Gated on `busy` so
+  // a device that cannot speak at all (local engine, no speechSynthesis) never shows a glow
+  // that nothing will ever switch off.
+  if(Voice.busy)setSpeaking(true);
+  return true;
+}
 function speakTarget(){
-  const txt=Prompt.say(G.rt);
-  if(!txt)return;
-  setSpeaking(true); Voice.speak(txt,{onend:()=>setSpeaking(false)});
-  if(!Voice.on)setTimeout(()=>setSpeaking(false),900);
+  const txt=Prompt.say(G&&G.rt);
+  if(!txt)return false;
+  return sayNow(txt);
 }
 function setSpeaking(v){ $('#btnSpeak').classList.toggle('speaking',v); }
 
@@ -1268,11 +1322,8 @@ function cardReveal(){
 
 $('#btnSpeak').onclick=()=>{ if(!G)return; SFX.click(); speakTarget(); };
 $('#btnHint').onclick=()=>{ if(!G)return; SFX.click(); const rt=G.rt;
-  if(rt.type==='phrase'){ setSpeaking(true); Voice.speak(rt.a+'，'+rt.b,{onend:()=>setSpeaking(false)});
-    $('#pSub').innerHTML='<span class="py">提示：'+rt.bpy+'</span>'; }
-  else { setSpeaking(true); Voice.speak(rt.text,{onend:()=>setSpeaking(false)});
-    $('#pSub').innerHTML='<span class="py">提示：'+rt.py+'</span>'; }
-  if(!Voice.on)setTimeout(()=>setSpeaking(false),900);
+  if(rt.type==='phrase'){ sayNow(rt.a+'，'+rt.b); $('#pSub').innerHTML='<span class="py">提示：'+rt.bpy+'</span>'; }
+  else { sayNow(rt.text); $('#pSub').innerHTML='<span class="py">提示：'+rt.py+'</span>'; }
 };
 
 function tapBubble(b,clientX,clientY){
@@ -1390,8 +1441,16 @@ function fillChips(box,rows,again){
 }
 $('#btnNext').onclick=()=>{ const nid=G.cfg.id+1; if(LEVELS.find(L=>L.id===nid))startLevel(nid); else{show('scr-levels');} };
 $('#btnReplay').onclick=()=>startLevel(G.cfg.id);
-$('#btnMap2').onclick=()=>{ cancelAnimationFrame(G&&G.raf); show('scr-levels'); renderMap(); };
-$('#btnHome').onclick=()=>{ if(G){G.sid++;cancelAnimationFrame(G.raf);G.raf=0;} show('scr-levels'); renderMap(); };
+/* Leaving a level must not leave the prompt talking over the map — a phrase round is ~5 s
+   of neural audio, and on the level screen there is no 🔊 to explain why it is still going.
+   Voice.stop() also settles the in-flight item, so the glow cannot survive the navigation. */
+function leaveGame(){
+  Voice.stop();
+  if(G){G.sid++;cancelAnimationFrame(G.raf);G.raf=0;}
+  show('scr-levels'); renderMap();
+}
+$('#btnMap2').onclick=()=>leaveGame();
+$('#btnHome').onclick=()=>leaveGame();
 
 /* ============ PHYSICS ============ */
 function loop(ts){
@@ -1430,8 +1489,8 @@ function render(){ for(const b of G.bubbles){ if(b.dead)continue; b.el.style.tra
 
 /* ============ NAV ============ */
 $('#btnStart').onclick=()=>{ SFX.ensure(); SFX.click(); Voice.prime(); Voice.speak('开始啦'); startLevel(continueId()); };
-$('#btnLevels').onclick=()=>{ SFX.click(); show('scr-levels'); renderMap(); };
-$('#btnBackMap').onclick=()=>{ SFX.click(); show('scr-start'); };
+$('#btnLevels').onclick=()=>{ SFX.click(); leaveGame(); };
+$('#btnBackMap').onclick=()=>{ SFX.click(); Voice.stop(); show('scr-start'); };
 
 /* ============ RESIZE ============ */
 let rT; addEventListener('resize',()=>{ clearTimeout(rT); rT=setTimeout(()=>{ if(G&&$('#scr-game').classList.contains('active')){ measure();
