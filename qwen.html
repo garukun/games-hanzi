@@ -12,8 +12,18 @@
 <style>
 :root{
   --ink:#2b3a55; --ink2:#5a6b88; --paper:#fffdf6;
-  --coral:#ff6b5e; --amber:#ffb63d; --teal:#29c1b0; --blue:#4d9de0;
-  --pink:#f27bae; --green:#7cb518; --orange:#ff8f3f; --gold:#ffce3a;
+  /* Four of these eight were never checked against anything. --coral/--teal/--blue were
+   * chosen as *fills* and then used as *text*, which is the trap: a mid-tone that carries a
+   * white label at 2.25:1 (teal) also reads as 2.21:1 body text on the paper card behind it.
+   * One deep value satisfies both roles at once — white on it is 5.26:1–5.44:1, and it as text
+   * on --paper is 5.17:1–5.34:1 — so 开始冒险, 下一关, 怎么玩？, the streak chip, the learned-word
+   * count and the ✗ wrong-answer toast all became legible in one edit per hue. See tests/ink.test.js,
+   * which recomputes every one of these ratios from the shipped hexes. */
+  --coral:#c0392b; --amber:#ffb63d; --teal:#12796f; --blue:#1f6fae;
+  /* The three that keep a *bright* fill and take a dark glyph instead, because darkening them
+   * would destroy the hue: gold becomes olive, pink becomes maroon. --ink on these measures
+   * 7.69:1 and 4.82:1. This is the same trade the bubble palettes make (see PALETTE START). */
+  --pink:#f585b0; --green:#4f7c12; --orange:#8f3f06; --gold:#ffce3a;
   --sky1:#9fd9ff; --sky2:#e9f8ff; --hill1:#8fd07e; --hill2:#62b857;
   --disp:'ZCOOL KuaiLe','Yuanti SC','YouYuan','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;
   --body:'Yuanti SC','YouYuan','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;
@@ -78,16 +88,19 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
   padding:12px 18px;box-shadow:0 6px 0 var(--cd,#000),0 12px 20px rgba(43,58,85,.22);transition:transform .08s,box-shadow .08s;
   display:flex;align-items:center;justify-content:center;gap:10px;letter-spacing:1px;}
 .btn3d:active{transform:translateY(4px);box-shadow:0 2px 0 var(--cd,#000),0 6px 12px rgba(43,58,85,.22);}
-.btn3d.coral{background:var(--coral);--cd:#d8463a;}
-.btn3d.teal{background:var(--teal);--cd:#1c9385;}
-.btn3d.amber{background:var(--amber);--cd:#d8931f;}
-.btn3d.blue{background:var(--blue);--cd:#2f7cb8;}
+.btn3d.coral{background:var(--coral);--cd:#8e2318;}
+.btn3d.teal{background:var(--teal);--cd:#0a4f48;}
+/* Amber stays bright everywhere else (it is the 💡 hint button, a help-row chip and the dashed
+ * rule round the note), so the button variant carries its own deep value rather than dragging
+ * the hue everywhere else down with it. */
+.btn3d.amber{background:#8a5f0c;--cd:#66450a;}
+.btn3d.blue{background:var(--blue);--cd:#144d7a;}
 .btn3d.small{font-size:16px;padding:9px 16px;}
 .stepStrip{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;padding:6px 0 4px;z-index:3;}
 .step{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.85);border:3px solid var(--ink);border-radius:999px;
   padding:5px 12px;font-weight:700;font-size:13px;box-shadow:0 3px 0 rgba(43,58,85,.16);}
 .step .e{font-size:18px;}
-.arr{font-size:18px;color:var(--ink2);font-weight:900;}
+.arr{font-size:18px;color:var(--ink);font-weight:900;}
 /* The five floating characters on the title screen used to be white on the bright --teal /
    --amber / --pink family, which measured 1.75–2.25:1 — the same defect the bubbles had.
    They are painted from Palette in the logo block below, so this only declares the shape. */
@@ -131,8 +144,11 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 .stars i{font-size:clamp(11px,2.6vmin,15px);color:#cdd5e4;line-height:1;}
 .stars i.on{color:var(--gold);text-shadow:0 1px 0 #d8931f;}
 /* Best 得分 per level. gemini.html had a score but no storage, so it could not show a
-   record anywhere; this is the reason to replay a level you have already cleared. */
-.nodeBest{font-weight:800;font-size:clamp(9px,2.2vmin,12px);color:var(--ink2);line-height:1;
+   record anywhere; this is the reason to replay a level you have already cleared.
+   --ink, not --ink2: this line is 9-12px, and --ink2 measures 3.56:1 against the top of the
+   sky gradient (which is where the first chapter's records sit) and 2.16:1 against the hill
+   the last chapter sits on. Same defect the footer below had. */
+.nodeBest{font-weight:800;font-size:clamp(9px,2.2vmin,12px);color:var(--ink);line-height:1;
   min-height:1em;font-variant-numeric:tabular-nums;}
 /* 总复习 is not "第13关" — it is a board assembled from every level, so the numeric prefix is
    hidden and the name carries the chip. `.lvlPre`/`.lvlNo`/`.lvlPost` exist as *classes* (not
@@ -177,15 +193,23 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 .dots{display:flex;gap:5px;align-items:center;flex:1;justify-content:safe center;flex-wrap:nowrap;
   min-width:0;overflow:hidden;}
 .dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--ink);background:#fff;flex:0 0 auto;}
-.dot.done{background:var(--gold);}
+/* A finished round is a filled gold dot and an unfinished one is a white dot: --gold against
+   #fff measures 1.48:1, so at 12px the pair is a hue difference and nothing else. The inner
+   ring gives it a second feature that survives greyscale, sunlight and colour blindness. */
+.dot.done{background:var(--gold);box-shadow:inset 0 0 0 2px #b8860b;}
 .dot.cur{animation:dotPulse 1s ease-in-out infinite;}
 .missChip{background:var(--paper);border:3px solid var(--ink);border-radius:14px;padding:4px 10px;font-weight:700;font-size:13px;
   box-shadow:0 3px 0 rgba(43,58,85,.18);display:none;}
 .missChip.show{display:inline-flex;gap:4px;align-items:center;}
 /* The live 得分 chip. tabular-nums stops the chip jittering wider as the digits grow, which
-   would otherwise shove the round dots sideways on every single tap. */
-.scoreChip{display:inline-flex;align-items:center;gap:3px;background:var(--gold);color:#fff;
-  box-shadow:0 4px 0 #d8931f;}
+   would otherwise shove the round dots sideways on every single tap.
+   It was the worst reading in the game — a white number on #ffce3a, 1.48:1 — and it is the one
+   number that moves. Gold is a pale hue, so the *glyph* darkens rather than the fill
+   (a deep gold is olive): --ink on --gold is 7.69:1. The 3px ring is drawn with box-shadow,
+   not border, so the chip gains the same ink outline as the paper chips beside it without
+   costing a single pixel of the header's width. */
+.scoreChip{display:inline-flex;align-items:center;gap:3px;background:var(--gold);color:var(--ink);
+  box-shadow:0 4px 0 #d8931f, 0 0 0 3px var(--ink);}
 .scoreChip #scoreN{min-width:2.4ch;text-align:right;font-variant-numeric:tabular-nums;}
 .scoreChip.pop{animation:scorePop .45s cubic-bezier(.34,1.56,.64,1);}
 .scoreChip.big{animation:scoreBig .5s cubic-bezier(.34,1.56,.64,1);}
@@ -253,7 +277,9 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 .setBtn:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(43,58,85,.18);}
 #playArea{flex:1;position:relative;border-radius:24px;overflow:hidden;touch-action:none;
   background:radial-gradient(120% 80% at 50% 0%,rgba(255,255,255,.35),rgba(255,255,255,0) 60%);}
-#comboChip{position:absolute;top:8px;right:10px;background:var(--pink);color:#fff;font-family:var(--disp);border:3px solid var(--ink);
+/* 连对 ×N +N分 — bright pink with a dark glyph (--ink on --pink is 4.82:1; white on the old
+   --pink was 2.55:1), the same trade the score chip makes. */
+#comboChip{position:absolute;top:8px;right:10px;background:var(--pink);color:var(--ink);font-family:var(--disp);border:3px solid var(--ink);
   border-radius:999px;padding:4px 12px;font-size:15px;box-shadow:0 4px 0 #c85389;opacity:0;transform:scale(.4);pointer-events:none;z-index:6;}
 #comboChip.show{animation:comboPop .4s cubic-bezier(.34,1.56,.64,1) forwards;}
 
@@ -330,8 +356,11 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 .cStars{display:flex;justify-content:center;gap:8px;margin:10px 0;}
 .cScore{font-weight:800;font-size:15px;color:var(--ink);margin:-4px 0 2px;font-variant-numeric:tabular-nums;}
 .cScore b{font-size:20px;color:var(--coral);}
-.cStar{font-size:46px;color:#dfe4ee;line-height:1;transform:scale(0);}
-.cStar.on{color:var(--gold);text-shadow:0 3px 0 #d8931f;animation:starPop .5s cubic-bezier(.34,1.56,.64,1) forwards;}
+/* An unearned star used to be drawn at scale(0) — invisible — so a child who cleared a level
+   with one star saw a single ★ and no idea there were two more to chase. Both states are now
+   drawn: the hollow ☆ at full size and pale, the filled ★ popping in. */
+.cStar{font-size:46px;color:#dfe4ee;line-height:1;}
+.cStar.on{color:var(--gold);text-shadow:0 3px 0 #d8931f;animation:starPop .5s cubic-bezier(.34,1.56,.64,1) both;}
 .cStats{font-weight:700;color:var(--ink2);font-size:13px;margin-bottom:14px;}
 /* ---------- LEARNED WORDS (clear card) ---------- */
 #cLearned{margin:8px 0 10px;}
@@ -397,7 +426,7 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 .helpRow .he{font-size:34px;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;
   border:3px solid var(--ink);flex:0 0 auto;}
 .helpRow p{margin:0;font-weight:700;font-size:14px;line-height:1.4;}
-.helpNote{background:#fff6d8;border:2px dashed var(--amber);border-radius:14px;padding:8px 12px;font-size:12px;font-weight:700;color:#a06a10;margin:12px 0;}
+.helpNote{background:#fff6d8;border:2px dashed var(--amber);border-radius:14px;padding:8px 12px;font-size:12px;font-weight:700;color:#8a5a0c;margin:12px 0;}
 .setRow{display:flex;align-items:center;gap:10px;margin:10px 0;}
 /* [hidden] is a UA display:none at specificity (0,1,0) and `.setRow{display:flex}` is an
    author rule at the same weight, so the author wins and the row would stay drawn on a
@@ -408,14 +437,21 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 .seg{flex:1;font-family:var(--disp);font-size:15px;padding:6px 4px;border:3px solid var(--ink);border-radius:999px;
   background:#fff;box-shadow:0 3px 0 rgba(43,58,85,.16);transition:transform .08s,box-shadow .08s,background .2s;}
 .seg:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(43,58,85,.16);}
-.seg.on{background:var(--teal);color:#fff;box-shadow:0 3px 0 #1c9385;}
+.seg.on{background:var(--teal);color:#fff;box-shadow:0 3px 0 #0a4f48;}
 #btnEngineTag{font-size:11px;font-weight:900;}
 
 /* ---------- TOAST / CONFETTI ---------- */
 #toastLayer{position:fixed;inset:0;z-index:30;pointer-events:none;}
 .toast{position:absolute;transform:translate(-50%,-50%);font-family:var(--disp);font-size:clamp(22px,6vw,34px);
-  white-space:nowrap;text-shadow:0 3px 0 rgba(43,58,85,.25);animation:toastUp 1s ease-out forwards;}
-.toast.good{color:#3fbf6b;}
+  white-space:nowrap;text-shadow:0 3px 0 rgba(255,255,255,.6);animation:toastUp 1s ease-out forwards;}
+/* The praise and the ✗ are 22-34px coloured type sitting straight on the sky, where the old
+   #3fbf6b measured 2.18:1 and #ff8f3f 2.09:1 — below even the 3:1 that large text gets. They
+   are *not* on a paper card, so they cannot borrow the bubble trick: a toast appears wherever
+   the child tapped, which near the top of the board is the darkest stop of the gradient, so
+   the pair is measured against --sky1 (4.93:1 / 4.80:1) and not against the average of it.
+   The offset shadow is now a light one, because a dark shadow under a dark glyph on a pale sky
+   is just a smudge. */
+.toast.good{color:#0e6230;}
 .toast.bad{color:var(--orange);}
 #confetti{position:fixed;inset:0;z-index:35;pointer-events:none;}
 
@@ -580,7 +616,7 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
       <header id="hud">
         <button class="iconBtn" id="btnHome">🏠</button>
         <span class="lvlChip" id="lvlChip"><span class="lvlPre">第</span><span class="lvlNo" id="lvlNo">1</span><span class="lvlPost">关</span><span class="lname" id="lvlName"></span><span class="lkind" id="lvlKind"></span></span>
-        <span class="lvlChip scoreChip" id="scoreChip">⭐<span id="scoreN">0</span></span>
+        <span class="lvlChip scoreChip" id="scoreChip">★<span id="scoreN">0</span></span>
         <div class="dots" id="dotsWrap"></div>
         <span class="missChip" id="missChip">💧<span id="missN">0</span></span>
         <button class="iconBtn" id="btnMute">🔊</button>
@@ -761,9 +797,13 @@ const CONF=[['人','入','八'],['大','太','天','夫'],['日','目','田','�
 ['木','本','禾'],['乌','鸟'],['兔','免'],['买','卖'],['未','末'],['由','甲'],['旧','旦'],['休','体'],
 ['贝','见'],['手','毛'],['爪','瓜'],['己','已','巳']];
 
-const CHAPTERS=[{name:'启蒙篇 · 三字经',emoji:'🌱',color:'#7cb518'},
-{name:'进阶篇 · 识词',emoji:'📚',color:'#4d9de0'},
-{name:'国学篇 · 弟子规',emoji:'🏮',color:'#ff6b5e'}];
+/* Chapter banner fills. These are the same three hues as the buttons and they carry a white
+ * label, so they are the :root values rather than a second set of literals — the first version
+ * of this table held #7cb518 / #4d9de0 / #ff6b5e inline and measured 2.48:1 / 2.91:1 / 2.79:1
+ * against their own white text. tests/ink.test.js fails if they ever drift from :root again. */
+const CHAPTERS=[{name:'启蒙篇 · 三字经',emoji:'🌱',color:'#4f7c12'},
+{name:'进阶篇 · 识词',emoji:'📚',color:'#1f6fae'},
+{name:'国学篇 · 弟子规',emoji:'🏮',color:'#c0392b'}];
 
 const LEVELS=[
  {id:1,ch:0,name:'初来乍到',type:'char',bubbles:4,correct:1,rounds:5,pool:P1,conf:0},
@@ -1693,7 +1733,12 @@ function renderMap(){
       if(!ul){ n.classList.add('locked'); n.innerHTML='<span class="lk">🔒</span>'; }
       else{ Palette.apply(n,Palette.at(L.id-1)); n.innerHTML='<span class="nm">'+L.id+'</span>'; if(L.id===cur)n.classList.add('current'); }
       const sr=document.createElement('div'); sr.className='stars';
-      for(let i=0;i<3;i++){ const s=document.createElement('i'); s.textContent='★'; if(i<st)s.classList.add('on'); sr.appendChild(s); }
+      // An earned star is a filled ★ and an unearned one a hollow ☆, because the two colours
+      // alone cannot tell them apart: --gold (#ffce3a) and the empty #cdd5e4 measure 1.01:1 —
+      // the same luminance — so the state was carried entirely by a hue difference that a
+      // colour-blind child, a sunlit screen or a greyscale e-reader discards. Shape survives
+      // all three, and it costs nothing. Same for the 46px stars on the result card.
+      for(let i=0;i<3;i++){ const s=document.createElement('i'); s.textContent=i<st?'★':'☆'; if(i<st)s.classList.add('on'); sr.appendChild(s); }
       const bs=document.createElement('div'); bs.className='nodeBest'; bs.textContent=ul?(Store.bestOf(L.id)||''):'';
       n.onclick=()=>{ if(!ul){ n.classList.add('shake'); setTimeout(()=>n.classList.remove('shake'),450); SFX.click();
         toast(inner.getBoundingClientRect().left+inner.clientWidth/2, n.getBoundingClientRect().top, '先过上一关哦','bad'); return; }
@@ -2203,7 +2248,7 @@ function levelClear(){
   $('#cSub').textContent=rev?pick(['都记得真牢','再来一组？','越来越熟练啦'])
     :last?'你是国学小状元！':pick(['你是识字小明星','继续加油哦','太了不起啦']);
   const cs=$('#cStars'); cs.innerHTML='';
-  for(let i=0;i<3;i++){ const s=document.createElement('span'); s.className='cStar'; s.textContent='★';
+  for(let i=0;i<3;i++){ const s=document.createElement('span'); s.className='cStar'; s.textContent=i<stars?'★':'☆';
     if(i<stars){ s.classList.add('on'); s.style.animationDelay=(0.3+i*0.35)+'s'; } cs.appendChild(s); }
   $('#cScore').innerHTML=record
     ? '得分 <b>'+Score.value+'</b> 🏆 新纪录！'
