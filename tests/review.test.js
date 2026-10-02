@@ -62,7 +62,7 @@ function loadData() {
   const src = page();
   const ctx = vm.createContext({});
   vm.runInContext(
-    slice(src, 'const PY={', '/* ============ AUDIO SFX') +
+    slice(src, 'const PY={', '/* ============ PINYIN') +
       '\nglobalThis.__d = { PY, WORDS, LEVELS, pyOf };',
     ctx,
     { filename: 'qwen.html#data' },

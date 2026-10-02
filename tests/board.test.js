@@ -76,7 +76,7 @@ function legacy(W, H, count, len) {
 
 /** The level table, so the suite runs against the twelve boards that ship. */
 function loadLevels() {
-  const src = slice(page(), 'const A=s=>', '/* ============ AUDIO SFX');
+  const src = slice(page(), 'const A=s=>', '/* ============ PINYIN');
   const ctx = vm.createContext({});
   vm.runInContext(src + '\nglobalThis.__levels = LEVELS;', ctx, { filename: 'qwen.html#levels' });
   const LEVELS = ctx.__levels;

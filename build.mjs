@@ -48,6 +48,8 @@ for (const marker of [
   'HELP END',
   'FULLSCREEN START',
   'FULLSCREEN END',
+  'PINYIN START',
+  'PINYIN END',
 ]) {
   if (!html.includes(marker)) {
     console.error(`build: ${SRC} is missing the "${marker}" marker that the tests rely on`);

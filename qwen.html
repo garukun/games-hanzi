@@ -790,7 +790,7 @@ const WORDS={太阳:'tài yáng',月亮:'yuè liang',星星:'xīng xing',爸爸:
 姐姐:'jiě jie',妹妹:'mèi mei',大山:'dà shān',小河:'xiǎo hé',花朵:'huā duǒ',草地:'cǎo dì',树木:'shù mù',
 小鸟:'xiǎo niǎo',鱼儿:'yú er',白云:'bái yún',下雨:'xià yǔ',上学:'shàng xué',读书:'dú shū',苹果:'píng guǒ',
 西瓜:'xī guā',牛奶:'niú nǎi',面包:'miàn bāo',唱歌:'chàng gē',画画:'huà huà',写字:'xiě zì',老师:'lǎo shī',
-快乐:'kuài lè',勇敢:'yǒng gn',聪明:'cōng ming',礼貌:'lǐ mào',诚实:'chéng shí',勤劳:'qín láo',分享:'fēn xiǎng',
+快乐:'kuài lè',勇敢:'yǒng gǎn',聪明:'cōng ming',礼貌:'lǐ mào',诚实:'chéng shí',勤劳:'qín láo',分享:'fēn xiǎng',
 朋友:'péng you',同学:'tóng xué',校园:'xiào yuán',春天:'chūn tiān',夏天:'xià tiān',秋天:'qiū tiān',冬天:'dōng tiān',
 海洋:'hǎi yáng',森林:'sēn lín',草原:'cǎo yuán',城市:'chéng shì',乡村:'xiāng cūn',音乐:'yīn yuè',美术:'měi shù',
 运动:'yùn dòng',游戏:'yóu xì',故事:'gù shi'};
@@ -855,6 +855,151 @@ const LEVELS=[
 ];
 
 function pyOf(type,t){ if(type==='char')return PY[t]||''; if(type==='word')return WORDS[t]||''; return ''; }
+
+/* ============ PINYIN ============ */
+/* PINYIN START */
+/* Every reading this game shows a child comes out of one of three hand-typed tables — PY (one
+ * character each), WORDS (one word each) and the four phrase pools, which carry both halves'
+ * readings inline — and 292 entries is enough of them for a typo to ship. One did:
+ * WORDS.勇敢 read "yǒng gn", and that string is what the 💡 hint line, the reveal line and
+ * the result-card chip all printed to a child who had just tapped the right bubble.
+ *
+ * Nothing downstream could have noticed. pyOf() hands back whatever the table holds, and "" is
+ * a legal reading as far as it knows; the reveal interpolates it; the tests that did exist
+ * checked that a reading *exists* (tests/review.test.js walks every pool) but never that it was
+ * a well-formed one. So the rules live here, next to the data, and run over it.
+ *
+ * The rules, and why each one is a rule rather than a preference:
+ *   · One syllable per character. "péng you" is two syllables for two characters; a third is
+ *     a dropped or doubled space and puts the tones under the wrong character.
+ *   · The mark sits on a vowel, and the rest of the syllable is a real final from
+ *     汉语拼音方案. Two marks in one syllable ("yǒǒng") is never how one is written, and
+ *     neither is g+n ("gn"), which is the shape the 勇敢 typo actually had.
+ *   · An unmarked syllable is 轻声 (neutral). That is *correct* in WORDS — 爸爸, 哥哥, 朋友,
+ *     星星 are genuinely neutral on the second syllable — and a defect everywhere else: each
+ *     of the 94 PY entries is a standalone character a child is learning to read, and
+ *     classical recitation puts a real tone on every syllable of 三字经 and 弟子规. 12 of the
+ *     52 words carry a neutral syllable today, which is exactly the set this rule has to let
+ *     through rather than reject wholesale.
+ *
+ * This is not a replacement for the test suite — tests/pinyin.test.js executes this same
+ * module against the real tables — it is the part that also runs in the shipped file, so an
+ * edit made in a hurry cannot reach a child unannounced. It costs one pass over 238 short
+ * strings at load and prints nothing when the data is clean. */
+const Pinyin=(()=>{
+  /* [base vowel, tone 1..4]. Built from explicit rows of literal characters rather than from
+     one long accented string: a single mis-typed character in such a string is invisible,
+     and a mis-typed *row* is caught by the test that walks this table. */
+  const MARKS=[
+    ['a','ā','á','ǎ','à'],['e','ē','é','ě','è'],['i','ī','í','ǐ','ì'],
+    ['o','ō','ó','ǒ','ò'],['u','ū','ú','ǔ','ù'],['ü','ǖ','ǘ','ǚ','ǜ'],
+    ['n','ń','','ǹ',''],['m','ḿ','','','']];
+  const TONE={};                                 // codepoint -> 1..4
+  const BASE={};                                 // codepoint -> the vowel it is written on
+  MARKS.forEach(row=>{ row.slice(1).forEach((c,i)=>{ if(!c)return;
+    TONE[c.codePointAt(0)]=i+1; BASE[c.codePointAt(0)]=row[0]; }); });
+  BASE[0xEA]='ê'; BASE[0xFC]='ü';               // ê and ü are vowels that carry no mark
+  /* The finals of 汉语拼音方案, and the reason `gn` is not a syllable. A rule that only checked
+     "letters, then exactly one tone mark" calls `yǒng gn` two valid syllables — g+n and a
+     neutral second syllable — which is exactly the string this module was written to catch, so
+     the *shape* of the final has to be checked too. `n`, `ng` and `m` are in the official
+     inventory as 舌尖元音, but only ever as a whole syllable (嗯 ń/ňg/ǹg, 呣 ḿ): an initial
+     followed by one of them is not pinyin at all. */
+  const FINALS=new Set(['a','o','e','ê','er','i','u','ü',
+    'ai','ei','ao','ou','an','en','ang','eng','ong',
+    'ia','ie','iao','iou','iu','ian','in','iang','ing','iong',
+    'ua','uo','uai','uei','ui','uan','uen','un','uang','ueng',
+    'üe','üan','ün','ue','n','ng','m']);           // 'ue' is how ü is written after y/j/q/x
+  const APICAL=new Set(['n','ng','m']);
+  /* Longest first: zh/ch/sh must win over z/c/s, and `n` must not eat the n in "niǎo". */
+  const INITIALS=['zh','ch','sh','b','p','m','f','d','t','n','l','g','k','h','j','q','x','r','z','c','s','y','w'];
+  const isVowel=c=>c>='a'&&c<='z'||!!BASE[c.codePointAt(0)];
+  /** One syllable's reading, or null if it is not one. `tone` is 1-4, or 0 for 轻声. */
+  function syl(s){
+    if(typeof s!=='string'||!s)return null;
+    let i=0,initial='';
+    for(const ini of INITIALS){ if(s.startsWith(ini)){ initial=ini; i=ini.length; break; } }
+    const vowel=s.slice(i);
+    if(!vowel)return null;                       // "zh", "ch" — an initial with nothing after it
+    let tone=0,bare='';
+    for(let j=0;j<vowel.length;j++){
+      const c=vowel[j],cp=c.codePointAt(0);
+      if(!isVowel(c))return null;                // a digit, a hyphen, a stray latin letter
+      const t=TONE[cp];
+      if(t)tone=t;                                // the last mark wins; there is only ever one
+      bare+=BASE[cp]||c;
+    }
+    // Two marks in one syllable ("yǒǒng", "maā") need no check of their own: folding each mark
+    // back to its letter repeats that letter, and no final in the table has a repeated one, so
+    // FINALS rejects them anyway. A separate marks>1 branch here could never change the answer.
+    if(!FINALS.has(bare))return null;             // "gn", "kk", "ee", "yǒǒng" — letters, not pinyin
+    if(initial&&APICAL.has(bare))return null;    // 舌尖元音 only ever stands alone
+    return {s,initial,vowel,tone,neutral:!tone};
+  }
+  /** A whole reading: whitespace-split syllables, or null if any of them is not a syllable. */
+  function parse(py){
+    if(typeof py!=='string'||!py.trim())return null;
+    const parts=py.trim().split(/\s+/);
+    const out=[];
+    for(const s of parts){ const p=syl(s); if(!p)return null; out.push(p); }
+    return out;
+  }
+  const syls=py=>parse(py)?py.trim().split(/\s+/):null;
+  /**
+   * `n` is the character count the reading must cover. `neutral` says whether an unmarked
+   * syllable is allowed here: pass false for a single character and for the classical text,
+   * where every syllable carries a real tone. Left out, it is *allowed* — the readings that
+   * reach the screen come from WORDS too, and 爸爸/哥哥 are genuinely neutral on the second
+   * syllable, so a bare `ok(py)` has to mean "shaped like a reading" rather than "carries a
+   * tone". Only an explicit `false` demands the mark.
+   */
+  function ok(py,n,neutral){
+    const p=parse(py);
+    if(!p)return false;
+    if(Number.isFinite(n)&&p.length!==n)return false;
+    if(neutral===false&&p.some(x=>x.tone===0))return false;
+    return true;
+  }
+  function add(out,table,key,why){ out.push({table,key,why}); }
+  function readOne(out,table,text,py,neutral){
+    if(typeof text!=='string'||!text){ add(out,table,String(text),'no text to read'); return; }
+    const n=[...text].length;
+    const p=parse(py);
+    if(!p){ add(out,table,text,'unreadable reading '+JSON.stringify(py)); return; }
+    if(p.length!==n) add(out,table,text,p.length+' syllables for '+n+' characters: '+py);
+    if(!neutral&&p.some(x=>x.tone===0))
+      add(out,table,text,'no tone mark on '+(p.filter(x=>x.tone===0).map(x=>x.s).join(' '))+': '+py);
+  }
+  /**
+   * Every defect in the shipped readings, as {table,key,why}. Clean data returns [].
+   * `pools` is the phrase pools: each row is [halfA,readingA,halfB,readingB].
+   */
+  function audit(pyTab,wordTab,pools){
+    const out=[];
+    for(const k in (pyTab||{})){
+      if([...String(k)].length!==1) add(out,'PY',k,'key is not a single character');
+      readOne(out,'PY',k,pyTab[k],false);
+    }
+    for(const w in (wordTab||{})) readOne(out,'WORDS',w,wordTab[w],true);
+    for(const pool of (Array.isArray(pools)?pools:[])){
+      for(const row of (Array.isArray(pool)?pool:[])){
+        if(!Array.isArray(row)||row.length<4){ add(out,'PHRASE',JSON.stringify(row),'row is not [a,apy,b,bpy]'); continue; }
+        readOne(out,'PHRASE',row[0],row[1],false);
+        readOne(out,'PHRASE',row[2],row[3],false);
+      }
+    }
+    return out;
+  }
+  return {MARKS,BASE,TONE,FINALS,APICAL,INITIALS,syl,parse,syls,ok,audit};
+})();
+/* PINYIN END */
+/* The shipped check, so the guarantee is not test-only: one pass over every reading the game
+ * can print, and a console warning naming each bad entry if any exist. The audit is also what
+ * tests/pinyin.test.js executes, so the rules cannot drift away from the data. */
+const PINYIN_DEFECTS=Pinyin.audit(PY,WORDS,[DZG1,SZJ1,DZG2,FIN]);
+if(PINYIN_DEFECTS.length&&typeof console!=='undefined')
+  console.warn('泡泡国学堂：拼音数据有问题 —',
+    PINYIN_DEFECTS.map(x=>'['+x.table+'] '+x.key+'：'+x.why).join(' / '));
 
 /* ============ AUDIO SFX ============ */
 const SFX=(()=>{
@@ -2136,18 +2281,29 @@ function cardListen(){
   if(rt.type==='phrase'){ $('#pBig').innerHTML=rt.a+'<span class="q">，？</span>'; $('#pSub').textContent='听一听，下一句是什么？'; }
   else { $('#pBig').textContent='听一听，找一找'; $('#pSub').textContent='找到读这个音的泡泡'; }
 }
+/* The one place the game's own reading is put on screen, so a word with no entry in PY/WORDS
+ * cannot leave a bare "提示：" with nothing after it. `Pinyin.ok()` is the shipped check that a
+ * reading exists *and* is well formed; this is the runtime guard for the case where the tables
+ * are edited and nobody looks at the audit. The fallback is the round's own question, which keeps
+ * the card exactly one line tall either way — an empty sub-line would otherwise shorten the card
+ * by a line on the one round where the child most needs to see something. */
+function pyLine(prefix,a,b,fallback){
+  return a&&Pinyin.ok(a)&&(b===undefined||Pinyin.ok(b))
+    ? '<span class="py">'+prefix+a+(b===undefined?'':' → '+b)+'</span>'
+    : (fallback||'');
+}
 function cardReveal(){
   const card=$('#promptCard'); card.classList.add('reveal');
   const rt=G.rt;
   if(rt.type==='phrase'){ $('#pBig').innerHTML='<span class="ra">'+rt.a+'</span><span class="ar">➜</span><span class="rb">'+rt.b+'</span>';
-    $('#pSub').innerHTML='<span class="py">'+rt.apy+' → '+rt.bpy+'</span>'; }
-  else { $('#pBig').textContent=rt.text; $('#pSub').innerHTML='<span class="py">'+rt.py+'</span>'; }
+    $('#pSub').innerHTML=pyLine('',rt.apy,rt.bpy,'听一听，再读一遍'); }
+  else { $('#pBig').textContent=rt.text; $('#pSub').innerHTML=pyLine('',rt.py,undefined,'读一读这个字'); }
 }
 
 $('#btnSpeak').onclick=()=>{ if(!G)return; SFX.click(); speakTarget(); };
 $('#btnHint').onclick=()=>{ if(!G)return; SFX.click(); const rt=G.rt;
-  if(rt.type==='phrase'){ sayNow(rt.a+'，'+rt.b); $('#pSub').innerHTML='<span class="py">提示：'+rt.bpy+'</span>'; }
-  else { sayNow(rt.text); $('#pSub').innerHTML='<span class="py">提示：'+rt.py+'</span>'; }
+  if(rt.type==='phrase'){ sayNow(rt.a+'，'+rt.b); $('#pSub').innerHTML=pyLine('提示：',rt.bpy,undefined,'再听一遍'); }
+  else { sayNow(rt.text); $('#pSub').innerHTML=pyLine('提示：',rt.py,undefined,'再听一遍'); }
 };
 /* gemini.html carried ⚙️ 设置 in its game header, so the voice, the pace and the question type
    were one tap away in the middle of a level. qwen's header has no room for it (tests/hud.test.js
