@@ -531,25 +531,34 @@ const SFX=(()=>{
 
 /* ==== VOICE ENGINE START ==== (extracted verbatim by tests/voice.test.js — keep self-contained) */
 /* ============ VOICE (neural TTS, local fallback) ============
- * Primary engine: Google Translate's neural Chinese voice, streamed to the page as MP3 and
- * played through a plain <audio> element. It needs no API key, is free, and is dramatically
- * more accurate than the OS speech engine — many Android devices ship *no* zh voice at all,
- * so speechSynthesis happily reads 汉字 with an English voice. The endpoint sends no CORS
- * headers, which is fine: we never fetch() it, the media element loads it directly.
- * If the network engine is unreachable we demote to window.speechSynthesis and stay there.
+ * Neural Chinese voices, streamed to the page as MP3 and played through a plain <audio>
+ * element. They need no API key, are free, and are dramatically more accurate than the OS
+ * speech engine — many Android devices ship *no* zh voice at all, so speechSynthesis happily
+ * reads 汉字 with an English voice. The endpoints send no CORS headers, which is fine: we never
+ * fetch() them, the media element loads them directly.
+ *
+ * Two providers sit in a ladder. Google Translate is primary (its clip is 24 kHz, Baidu's is
+ * 16 kHz); Baidu's free fanyi TTS is the backup so a Google outage, throttle or captive-portal
+ * block degrades to a *different neural voice* rather than to the awful device voice. Only when
+ * the whole ladder fails do we demote to window.speechSynthesis. A provider that fails twice in
+ * a row is quarantined for the session so we never spend the 5 s load timeout twice per tap.
  */
 const Voice=(()=>{
   const SYNTH=window.speechSynthesis||null;
-  const HOST='https://translate.google.com/translate_tts';
+  const enc=t=>encodeURIComponent(t);
   // The endpoint quantises ttsspeed: anything >= 0.4 is ignored, <= 0.3 buys ~19% more air.
   const SPEED={slow:0.3,normal:1};
+  // Baidu's spd is a real 1..5 dial (spd=1 is ~30% slower than spd=4); the pair below is tuned
+  // to land on roughly the same tempo as Google's clip so the speed setting means one thing.
+  const BSPD={slow:1,normal:4};
   const LOCAL_RATE={slow:0.62,normal:0.88};
-  const CHUNK=90;          // chars per request (well under the endpoint's 200 cap)
-  const LOAD_TIMEOUT=5000; // ms to wait for mp3 before demoting to the local engine
+  const CHUNK=90;          // chars per request (well under the endpoints' limits)
+  const LOAD_TIMEOUT=5000; // ms to wait for mp3 before trying the next provider
   const CACHE_MAX=240;     // LRU-ish cap so long sessions don't grow unbounded
   const PRE_MAX=3;         // concurrent prefetches (be nice to a free endpoint)
   const PRE_GAP=130;       // ms between prefetch starts
-  const NET_GIVEUP=2;      // consecutive failures before auto mode stops trying the network
+  const NET_GIVEUP=2;      // consecutive whole-ladder failures before auto mode stays local
+  const PROV_GIVEUP=2;     // consecutive failures of one provider before it is quarantined
   // 1 frame of near-silence: unlocking the audio session inside a user gesture is required on
   // iOS Safari, and it must not make a network request to do it.
   const SILENT='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
@@ -564,23 +573,43 @@ const Voice=(()=>{
   let playing=false;
   let primed=false;
   let preCount=0, preTimer=0;
-  const cache=new Map();        // "speed|text" -> HTMLAudioElement
-  const pending=new Map();      // "speed|text" -> {a,rej}
-  const stats={neural:0,local:0,errors:0};
+  let lastProvider=null;        // provider that carried the most recent clip
+  const cache=new Map();        // "provider|speed|text" -> HTMLAudioElement
+  const pending=new Map();      // "provider|speed|text" -> {a,rej}
+  const stats={neural:0,local:0,errors:0,providers:{}};
+
+  /* The neural ladder. `clean` is folded before it is built because both endpoints answer
+   * 4xx/5xx on an empty q, and neither tolerates a raw newline. */
+  const PROVIDERS=[
+    {id:'google', fails:0,
+     build(t){ const c=clean(t); return c?('https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=zh-CN&ttsspeed='+SPEED[speed]+'&q='+enc(c)):''; }},
+    {id:'baidu', fails:0,
+     build(t){ const c=clean(t); return c?('https://fanyi.baidu.com/gettts?lan=zh&text='+enc(c)+'&spd='+BSPD[speed]+'&source=web'):''; }},
+  ];
+  PROVIDERS.forEach(p=>{ stats.providers[p.id]=0; });
+
+  function clean(text){ return String(text==null?'':text).replace(/[\r\n]+/g,' ').trim(); }
+
+  /** Provider ids to try, best first: healthy ones (last-winner preferred), quarantined last. */
+  function order(){
+    const live=[],dead=[];
+    PROVIDERS.forEach(p=>((p.fails>=PROV_GIVEUP)?dead:live).push(p));
+    const i=live.indexOf(lastProvider);
+    if(i>0)live.push(live.shift());
+    return live.concat(dead);
+  }
 
   function pickLocal(){ if(!SYNTH)return; const vs=SYNTH.getVoices()||[]; const zh=vs.filter(v=>/^zh/i.test(v.lang));
     localVoice=zh.find(v=>/CN|Hans|Tingting|Meijia|Sinji|Yaoyao/i.test(v.lang+v.name))||zh[0]
       ||vs.find(v=>/zh/i.test(v.lang))||null; }
   if(SYNTH){ try{ pickLocal(); SYNTH.onvoiceschanged=pickLocal; }catch(e){} }
 
-  function key(text){ return speed+'|'+text; }
+  function key(p,text){ return p.id+'|'+speed+'|'+text; }
+  function byId(id){ for(const p of PROVIDERS){ if(p.id===id)return p; } return PROVIDERS[0]; }
+  function have(text){ return PROVIDERS.some(p=>cache.has(key(p,text))||pending.has(key(p,text))); }
 
-  function buildUrl(text){
-    // Spaces and newlines are legal but the endpoint answers 400 on an empty q, so guard here.
-    const clean=String(text).replace(/[\r\n]+/g,' ').trim();
-    if(!clean)return '';
-    return HOST+'?ie=UTF-8&client=tw-ob&tl=zh-CN&ttsspeed='+SPEED[speed]+'&q='+encodeURIComponent(clean);
-  }
+  // Default (primary) provider's URL; pass an id to ask a specific rung of the ladder.
+  function buildUrl(text,id){ return byId(id||'google').build(text); }
 
   // Split over-long text on punctuation so phrases keep their natural phrasing.
   function chunk(text){
@@ -601,17 +630,17 @@ const Voice=(()=>{
     return out.length?out:[s];
   }
 
-  // Fetch (really: preload) one clip. Resolves with an <audio> ready to play.
-  function load(text){
-    const k=key(text);
+  // Fetch (really: preload) one clip from one provider. Resolves with an <audio> ready to play.
+  function load(p,text){
+    const k=key(p,text);
     const hit=cache.get(k); if(hit){ cache.delete(k); cache.set(k,hit); return Promise.resolve(hit); }
-    const inflight=pending.get(k); if(inflight)return inflight.p;
-    const url=buildUrl(text);
+    const inflight=pending.get(k); if(inflight)return inflight.q;
+    const url=p.build(text);
     if(!url)return Promise.reject(new Error('empty'));
     let a;
     try{ a=new Audio(); }catch(e){ return Promise.reject(e); }
-    a.preload='auto'; a.playsInline=true; a.src=url;
-    const p=new Promise((res,rej)=>{
+    a.preload='auto'; a.playsInline=true; a.src=url; a.__pid=p.id;
+    const q=new Promise((res,rej)=>{
       const timer=setTimeout(()=>{ cleanup(); rej(new Error('timeout')); },LOAD_TIMEOUT);
       function cleanup(){ clearTimeout(timer); a.removeEventListener('canplaythrough',ok); a.removeEventListener('error',bad); }
       function ok(){ cleanup(); res(a); }
@@ -619,14 +648,29 @@ const Voice=(()=>{
       a.addEventListener('canplaythrough',ok); a.addEventListener('error',bad);
       try{ a.load(); }catch(e){ cleanup(); rej(e); }
     }).then(a=>{ pending.delete(k); cache.set(k,a); if(cache.size>CACHE_MAX)cache.delete(cache.keys().next().value); return a; },
-           e=>{ pending.delete(k); throw e; });
-    pending.set(k,{a,p});
-    return p;
+             e=>{ pending.delete(k); throw e; });
+    pending.set(k,{a,q});
+    return q;
+  }
+
+  /** Walk the ladder for one clip: try each provider in turn, remember who served it. */
+  function fetchClip(text){
+    const ladder=order(); let i=0;
+    const attempt=()=>{
+      if(i>=ladder.length)return Promise.reject(new Error('no provider available'));
+      const p=ladder[i];
+      return load(p,text).then(a=>{ p.fails=0; lastProvider=p; return a; },e=>{
+        p.fails++; stats.errors++; i++;
+        if(typeof console!=='undefined'&&console.debug)console.debug('[Voice] '+p.id+' TTS unavailable',e);
+        return attempt();
+      });
+    };
+    return attempt();
   }
 
   function neuralFail(e){
-    stats.errors++; netFail++;
-    if(typeof console!=='undefined'&&console.debug)console.debug('[Voice] neural unavailable, falling back to system voice',e);
+    netFail++;
+    if(typeof console!=='undefined'&&console.debug)console.debug('[Voice] every neural provider failed, falling back to system voice',e);
   }
 
   function playNeural(item,parts){
@@ -635,9 +679,10 @@ const Voice=(()=>{
       if(item.e!==epoch||!on)return done();
       if(i>=parts.length)return done();
       const part=parts[i++];
-      load(part).then(a=>{
+      fetchClip(part).then(a=>{
         if(item.e!==epoch||!on)return done();
         stats.neural++;
+        if(a.__pid){ stats.providers[a.__pid]=(stats.providers[a.__pid]||0)+1; lastProvider=byId(a.__pid); }
         a.currentTime=0;
         const p=a.play();
         const bail=()=>{ if(item.e===epoch){ try{a.pause();}catch(_){} } };
@@ -697,12 +742,12 @@ const Voice=(()=>{
   }
 
   // Warm the cache for a level's vocabulary so the first tap is instant.
-  // Speeds itself so a whole 60-word level never hammers the free endpoint at once.
+  // Speeds itself so a whole 60-word level never hammers a free endpoint at once.
   let preQueue=[];
   function prefetch(texts){
     const seen=new Set();
-    (Array.isArray(texts)?texts:[texts]).forEach(t=>{ const s=String(t||'').trim(); if(!s||seen.has(key(s)))return;
-      if(cache.has(key(s))||pending.has(key(s)))return; seen.add(key(s)); preQueue.push(s); });
+    (Array.isArray(texts)?texts:[texts]).forEach(t=>{ const s=clean(t); if(!s||seen.has(s))return;
+      if(have(s))return; seen.add(s); preQueue.push(s); });
     if(preQueue.length&&!preTimer)preTimer=setTimeout(preStep,PRE_GAP);
   }
   function preStep(){
@@ -710,7 +755,7 @@ const Voice=(()=>{
     while(preCount<PRE_MAX&&preQueue.length){
       const t=preQueue.shift();
       preCount++;
-      load(t).catch(()=>{}).then(()=>{ preCount=Math.max(0,preCount-1); if(preQueue.length&&!preTimer)preTimer=setTimeout(preStep,PRE_GAP); });
+      fetchClip(t).catch(()=>{}).then(()=>{ preCount=Math.max(0,preCount-1); if(preQueue.length&&!preTimer)preTimer=setTimeout(preStep,PRE_GAP); });
     }
   }
 
@@ -722,7 +767,7 @@ const Voice=(()=>{
 
   return {
     speak(text,opt={}){
-      const s=String(text||'').trim();
+      const s=clean(text);
       if(!s)return;
       if(!on){ opt.onend&&opt.onend(); return; }
       if(opt.interrupt!==false)stop();
@@ -732,14 +777,18 @@ const Voice=(()=>{
     prefetch, prime, stop,
     setOn(v){ if(on===v)return; on=v; if(!v)stop(); },
     get on(){ return on; },
-    setEngine(v){ if(v!=='auto'&&v!=='neural'&&v!=='local')return; engine=v; netFail=0; },
+    setEngine(v){ if(v!=='auto'&&v!=='neural'&&v!=='local')return; engine=v; netFail=0; lastProvider=null;
+      PROVIDERS.forEach(p=>{ p.fails=0; }); },  // an explicit choice deserves a fresh ladder
     get engine(){ return engine; },
     // 'auto' reports which engine actually carried the last utterance.
     get activeEngine(){ return stats.neural>=stats.local?'neural':'local'; },
+    // Which rung of the neural ladder served the last clip (null until one has played).
+    get provider(){ return lastProvider&&lastProvider.id||null; },
     setSpeed(v){ if(v!=='slow'&&v!=='normal')return; speed=v; },
     get speed(){ return speed; },
-    get stats(){ return Object.assign({},stats,{cached:cache.size,queued:queue.length}); },
-    _internals:{ buildUrl, chunk, key, load, SPEED, CHUNK, CACHE_MAX, LOAD_TIMEOUT }
+    get stats(){ return {neural:stats.neural,local:stats.local,errors:stats.errors,
+      providers:Object.assign({},stats.providers),cached:cache.size,queued:queue.length}; },
+    _internals:{ buildUrl, chunk, key, have, load, fetchClip, order, PROVIDERS, SPEED, BSPD, CHUNK, CACHE_MAX, LOAD_TIMEOUT, PROV_GIVEUP, NET_GIVEUP }
   };
 })();
 /* ==== VOICE ENGINE END ==== */
@@ -821,8 +870,15 @@ $('#btnHelpOk').onclick=()=>$('#modalHelp').classList.remove('show');
 // Warm the network TTS cache for a level's whole vocabulary while the child reads the intro.
 function prefetchLevel(cfg){
   if(!cfg)return;
-  const items=cfg.type==='phrase'?cfg.pool.map(p=>p[0]).concat(cfg.pool.map(p=>p[1]))
-    :(typeof cfg.pool[0]==='string'?cfg.pool:[]);
+  // slice(): for char/word levels cfg.pool *is* the level's vocabulary table, and the praise
+  // lines are appended below — without the copy they would become playable bubbles.
+  // Phrase rows are [a, pinyin(a), b, pinyin(b)]: warm the two halves that are actually spoken
+  // (the prompt reads a, and b is what the child taps), never the Latin pinyin.
+  const items=(cfg.type==='phrase'?cfg.pool.map(p=>p[0]).concat(cfg.pool.map(p=>p[2]))
+    :(typeof cfg.pool[0]==='string'?cfg.pool:[])).slice();
+  // The six spoken praises are reused by every level, so warm them once alongside the
+  // vocabulary — after that the cache hit makes the reward instant with no extra requests.
+  for(const p of Praise.SPOKEN)items.push(p);
   if(!items.length)return;
   if(Voice.engine==='local')return;
   const warm=()=>Voice.prefetch(items);
@@ -894,6 +950,23 @@ const Faces=(()=>{
   return {SPECIES,KINDS,REACT_MS,pick,idFor,vars,markup,cls,byId};
 })();
 /* ==== FACES END ==== */
+
+/* ==== PRAISE START ==== */
+/* gemini.html spoke a congratulation out loud after every correct tap, so the reward was
+ * *heard* as well as seen. Here the toast carries the praise but is silent, so this module
+ * owns the spoken line: short, in the same voice as the lesson, and never the same line
+ * twice in a row. Trailing "！" is dropped because the neural voice already pauses on it. */
+const Praise=(()=>{
+  const SPOKEN=['对啦','真棒','好样的','太厉害了','答对啦','你真聪明'];
+  let last=null;
+  function spoken(){
+    const pool=last&&SPOKEN.length>1?SPOKEN.filter(x=>x!==last):SPOKEN;
+    const v=pool[(Math.random()*pool.length)|0];
+    last=v; return v;
+  }
+  return {SPOKEN, spoken};
+})();
+/* ==== PRAISE END ==== */
 
 /* ============ GAME ENGINE ============ */
 let G=null; // game state
@@ -1036,6 +1109,12 @@ function tapBubble(b,clientX,clientY){
     Confetti.burst(rc.left+rc.width/2,rc.top+rc.height/2,14,5);
     b.el.classList.add('burst'); G.bubbles=G.bubbles.filter(x=>x!==b);
     showCombo();
+    // gemini.html read a congratulation out loud on every correct tap; the toast above is
+    // silent, so queue the spoken line behind the character (interrupt:false) instead of
+    // letting it cut the pronunciation off. This replaces the line roundWin() used to
+    // speak at the *end* of a round, so the reward lands within half a second of the tap
+    // and a two-target round praises each hit.
+    Voice.speak(Praise.spoken(),{interrupt:false});
     if(G.found>=G.need)roundWin();
   } else if(!b.isTarget){
     G.mistakes++; G.streak=0; hideCombo();
@@ -1063,8 +1142,8 @@ $('#playArea').addEventListener('pointerup',e=>{
 
 function roundWin(){
   G.lock=true; cardReveal(); SFX.sparkle();
-  const pr=pick(['真棒','太厉害了','好样的','答对啦','你真聪明','小明星']);
-  Voice.speak(pr,{interrupt:false});
+  // No spoken line here: tapBubble() already congratulated the hit that closed the round,
+  // and stacking two praises 1.7 s apart just trains the child to tune the reward out.
   const sid=G.sid;
   setTimeout(()=>{ if(!G||G.sid!==sid)return;
     if(G.round<G.cfg.rounds)nextRound(); else levelClear(); },1700);

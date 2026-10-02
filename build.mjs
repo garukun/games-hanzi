@@ -24,6 +24,8 @@ for (const marker of [
   'VOICE ENGINE END',
   'FACES START',
   'FACES END',
+  'PRAISE START',
+  'PRAISE END',
 ]) {
   if (!html.includes(marker)) {
     console.error(`build: ${SRC} is missing the "${marker}" marker that the tests rely on`);

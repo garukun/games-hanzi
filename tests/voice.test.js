@@ -51,10 +51,12 @@ function makeAudioClass(net) {
     }
     load() {
       this.loadCalls++;
-      // net.offline drives the failure path; otherwise report the clip ready.
+      // net.offline drives the failure path; net.failHosts kills individual
+      // providers (matched against the URL) so failover can be exercised.
       Promise.resolve().then(() => {
         if (net.hang) return; // neither event ever arrives
-        if (net.offline) {
+        const dead = net.failHosts.some((h) => this.src.includes(h));
+        if (net.offline || dead) {
           if (this._h.error) this._h.error({ type: 'error' });
         } else if (this._h.canplaythrough) {
           this._h.canplaythrough({ type: 'canplaythrough' });
@@ -115,6 +117,7 @@ function makeSynth() {
  * @param {boolean}  cfg.noSynth  omit window.speechSynthesis entirely
  * @param {boolean}  cfg.offline  make every clip fail to load
  * @param {boolean}  cfg.blocked  make audio.play() reject with NotAllowedError
+ * @param {string[]} cfg.failHosts URL substrings whose provider always fails to load
  */
 function loadEngine(cfg = {}) {
   const html = fs.readFileSync(PAGE, 'utf8');
@@ -124,7 +127,7 @@ function loadEngine(cfg = {}) {
   assert.ok(start > -1 && end > start, 'VOICE ENGINE markers not found in qwen.html');
   const src = html.slice(start, end + endMark.length);
 
-  const net = { offline: !!cfg.offline, blocked: !!cfg.blocked, hang: false };
+  const net = { offline: !!cfg.offline, blocked: !!cfg.blocked, hang: false, failHosts: cfg.failHosts || [] };
   const FakeAudio = makeAudioClass(net);
   const synth = cfg.noSynth ? null : makeSynth();
   if (synth) {
@@ -188,7 +191,16 @@ function loadEngine(cfg = {}) {
     net,
     /** The clips that started playing and have not finished, oldest first. */
     playing: () => FakeAudio.created.filter((a) => a.playCalls > 0 && !a._done),
+    /** Every clip requested, tagged with the provider that served it. */
+    clips: () => FakeAudio.created.map((a) => ({ a, host: providerOf(a.src) })),
   };
+  /** Which rung of the ladder a URL belongs to. */
+  function providerOf(url) {
+    if (url.includes('translate.google.com')) return 'google';
+    if (url.includes('fanyi.baidu.com')) return 'baidu';
+    return url.startsWith('data:') ? 'prime' : 'unknown';
+  }
+  harness.providerOf = providerOf;
   /** Finish clips one by one until nothing is playing. Returns how many. */
   harness.drain = async (max = 20) => {
     let n = 0;
@@ -393,12 +405,16 @@ test('auto mode demotes to the local engine after repeated network failures', as
   await settle(h);
   h.Voice.speak('字');
   await settle(h);
-  assert.strictEqual(h.Voice.stats.local, 2, 'both attempts should have fallen back');
+  assert.strictEqual(h.synth.spoken.length, 2, 'both attempts should have fallen back');
 
   h.Voice.speak('母');
   await settle(h);
   const net = h.Audio.created.filter((a) => a.src.startsWith('https://'));
-  assert.strictEqual(net.length, 2, 'auto mode must stop hammering a dead endpoint');
+  assert.strictEqual(
+    net.length,
+    4,
+    'auto mode must stop hammering a dead endpoint after two whole-ladder failures (2 x 2 providers)',
+  );
   assert.strictEqual(h.synth.spoken.length, 3);
 });
 
@@ -419,8 +435,9 @@ test('engine:"neural" retries the network even after auto mode gave up', async (
   h.Voice.setEngine('neural');
   h.Voice.speak('母');
   await settle(h);
-  assert.strictEqual(h.Audio.created.length, 2);
-  assert.ok(h.Audio.created[1].src.startsWith('https://'));
+  // setEngine also un-quarantines the providers, so both rungs are retried.
+  assert.strictEqual(h.Audio.created.length, 4);
+  assert.ok(h.Audio.created[3].src.startsWith('https://'));
 });
 
 test('setEngine rejects unknown values', () => {
@@ -574,4 +591,230 @@ test('speaking text never outlives an interrupt (stale onend is swallowed)', asy
   h.Audio.created[1].finish();
   await settle(h);
   assert.deepStrictEqual(fired, ['母'], 'the live utterance never completed');
+});
+
+/* ------------------------------------------------------------------ *
+ * The neural ladder: Google (primary) -> Baidu (backup) -> OS voice
+ * ------------------------------------------------------------------ */
+
+test('both neural providers build keyless URLs for the same text', () => {
+  const { Voice } = loadEngine();
+  const g = Voice._internals.buildUrl('汉字', 'google');
+  const b = Voice._internals.buildUrl('汉字', 'baidu');
+  assert.ok(g.startsWith('https://translate.google.com/translate_tts?'), g);
+  assert.ok(b.startsWith('https://fanyi.baidu.com/gettts?'), b);
+  for (const url of [g, b]) {
+    assert.ok(!/api[_-]?key|token|key=/i.test(url), 'no endpoint may need a credential: ' + url);
+    assert.ok(url.includes('%E6%B1%89%E5%AD%97'), 'text must be percent-encoded: ' + url);
+    assert.ok(!url.includes('q=汉字') && !url.includes('text=汉字'), 'raw CJK leaked: ' + url);
+  }
+  assert.ok(g.includes('client=tw-ob'), 'client=tw-ob is required or the endpoint 302s');
+  assert.ok(b.includes('lan=zh'), b);
+  assert.strictEqual(Voice._internals.buildUrl('汉字'), g, 'the default must stay the primary provider');
+});
+
+test('each provider maps the slow/normal setting onto its own speed dial', () => {
+  const h = loadEngine();
+  const I = h.Voice._internals;
+  assert.ok(I.buildUrl('汉', 'google').includes('ttsspeed=1'));
+  assert.ok(I.buildUrl('汉', 'baidu').includes('spd=' + I.BSPD.normal));
+
+  h.Voice.setSpeed('slow');
+  assert.ok(I.buildUrl('汉', 'google').includes('ttsspeed=0.3'), 'google slows only at <=0.3');
+  assert.ok(I.buildUrl('汉', 'baidu').includes('spd=' + I.BSPD.slow));
+  assert.ok(I.BSPD.slow < I.BSPD.normal, 'the backup dial must actually move');
+});
+
+test('both providers reject empty text, which their endpoints answer 4xx/5xx on', () => {
+  const { Voice } = loadEngine();
+  for (const id of Voice._internals.PROVIDERS.map((p) => p.id)) {
+    assert.strictEqual(Voice._internals.buildUrl('', id), '', id);
+    assert.strictEqual(Voice._internals.buildUrl(' \n\t ', id), '', id);
+  }
+});
+
+test('a dead primary provider hands the clip to the backup, never to the OS voice', async () => {
+  const h = loadEngine({ failHosts: ['translate.google.com'] });
+  h.Voice.speak('汉');
+  await settle(h);
+
+  assert.deepStrictEqual(
+    h.clips().map((c) => c.host),
+    ['google', 'baidu'],
+    'the ladder must try google, then baidu',
+  );
+  const playing = h.playing();
+  assert.strictEqual(playing.length, 1);
+  assert.ok(playing[0].src.includes('fanyi.baidu.com'), playing[0].src);
+  assert.strictEqual(h.playing()[0].playCalls, 1);
+  assert.strictEqual(h.synth.spoken.length, 0, 'a neural backup must beat the system voice');
+  assert.strictEqual(h.Voice.provider, 'baidu');
+  assert.strictEqual(h.Voice.stats.providers.baidu, 1);
+  assert.strictEqual(h.Voice.stats.providers.google, 0);
+  assert.strictEqual(h.Voice.stats.errors, 1, 'only the dead provider counts as an error');
+  assert.strictEqual(h.Voice.activeEngine, 'neural');
+});
+
+test('the backup becomes the preferred provider while the primary is dead', async () => {
+  const h = loadEngine({ failHosts: ['translate.google.com'] });
+  h.Voice.speak('汉');
+  await settle(h);
+  h.playing()[0].finish();
+  h.Voice.speak('字');
+  await settle(h);
+  assert.deepStrictEqual(
+    h.clips().map((c) => c.host),
+    ['google', 'baidu', 'baidu'],
+    'after one failure the working provider should be tried first',
+  );
+});
+
+test('a working provider is promoted, so a dead rung is not retried on every tap', async () => {
+  const h = loadEngine({ failHosts: ['translate.google.com'] });
+  for (const t of ['汉', '字', '大']) {
+    h.Voice.speak(t);
+    await settle(h);
+    h.playing().forEach((a) => a.finish());
+  }
+  const perProvider = h.clips().reduce((m, c) => ((m[c.host] = (m[c.host] || 0) + 1), m), {});
+  assert.strictEqual(perProvider.google, 1, 'google failed once, then must not be asked again');
+  assert.strictEqual(perProvider.baidu, 3, 'every tap is carried by the backup');
+  assert.deepStrictEqual(
+    plain(h.Voice._internals.order()).map((p) => p.id),
+    ['baidu', 'google'],
+    'the provider that served last is tried first',
+  );
+});
+
+test('a provider that keeps failing is quarantined after PROV_GIVEUP attempts', async () => {
+  const h = loadEngine({ offline: true });
+  for (const t of ['汉', '字']) {
+    h.Voice.speak(t);
+    await settle(h);
+  }
+  assert.ok(
+    h.Voice._internals.PROVIDERS.every((p) => p.fails === h.Voice._internals.PROV_GIVEUP),
+    'each rung gets exactly PROV_GIVEUP tries: ' + JSON.stringify(plain(h.Voice._internals.PROVIDERS)),
+  );
+  assert.strictEqual(
+    h.clips().filter((c) => c.host !== 'prime').length,
+    4,
+    'two utterances x two rungs, then auto mode gave up on the network',
+  );
+});
+
+test('only when the whole ladder fails does the OS voice take over', async () => {
+  const h = loadEngine({ offline: true });
+  h.Voice.speak('汉');
+  await settle(h);
+  assert.strictEqual(h.synth.spoken.length, 1);
+  assert.strictEqual(h.synth.spoken[0].text, '汉');
+  assert.strictEqual(h.synth.spoken[0].voice.name, 'Tingting');
+  assert.strictEqual(h.Voice.stats.errors, 2, 'both providers failed');
+});
+
+test('a dead backup never costs the primary anything (and vice versa)', async () => {
+  const h = loadEngine({ failHosts: ['fanyi.baidu.com'] });
+  h.Voice.speak('汉');
+  await settle(h);
+  assert.deepStrictEqual(h.clips().map((c) => c.host), ['google']);
+  assert.ok(h.playing()[0].src.includes('translate.google.com'));
+  assert.strictEqual(h.Voice.provider, 'google');
+  assert.strictEqual(h.Voice.stats.errors, 0, 'a rung that never failed must not be blamed');
+});
+
+test('the same text is fetched once, not once per rung, and replays from cache', async () => {
+  const h = loadEngine({ failHosts: ['translate.google.com'] });
+  h.Voice.speak('汉');
+  await settle(h);
+  const cached = h.playing()[0];
+  assert.ok(cached.src.includes('fanyi.baidu.com'), cached.src);
+  cached.finish();
+
+  h.Voice.speak('汉');
+  await settle(h);
+  assert.strictEqual(h.Audio.created.length, 2, 'the backup clip must be replayed from cache');
+  assert.strictEqual(cached.playCalls, 2);
+  h.playing().forEach((a) => a.finish());
+
+  h.Voice.speak('汉');
+  await settle(h);
+  assert.strictEqual(h.Audio.created.length, 2, 'still no fifth request');
+  assert.strictEqual(cached.playCalls, 3);
+});
+
+test('prefetch survives a dead primary and warms the backup instead', async () => {
+  const h = loadEngine({ failHosts: ['translate.google.com'] });
+  h.Voice.prefetch(['汉', '字', '汉']);
+  await settle(h);
+  const counts = h.clips().reduce((m, c) => ((m[c.host] = (m[c.host] || 0) + 1), m), {});
+  assert.strictEqual(counts.baidu, 2, 'both words must be cached from the backup: ' + JSON.stringify(counts));
+  assert.ok(counts.google >= 1, 'the primary is attempted first for every word');
+
+  h.Voice.speak('汉');
+  await settle(h);
+  assert.strictEqual(h.Audio.created.length, 4, 'the tap must be a cache hit, not a fifth request');
+  assert.strictEqual(h.Voice.stats.neural, 1);
+  assert.strictEqual(h.Voice.provider, 'baidu');
+});
+
+test('provider health resets when the child changes the voice setting', async () => {
+  const h = loadEngine({ failHosts: ['translate.google.com'] });
+  h.Voice.speak('汉');
+  await settle(h);
+  assert.ok(h.Voice._internals.PROVIDERS[0].fails > 0, 'google recorded a failure');
+
+  h.Voice.setEngine('auto');
+  assert.ok(
+    h.Voice._internals.PROVIDERS.every((p) => p.fails === 0),
+    'setEngine must un-quarantine',
+  );
+  assert.deepStrictEqual(
+    plain(h.Voice._internals.order()).map((p) => p.id),
+    ['google', 'baidu'],
+    'the primary is retried first after an explicit reset',
+  );
+});
+
+test('the ladder is ordered google -> baidu, both keyless, both https', () => {
+  const h = loadEngine();
+  for (const p of h.Voice._internals.PROVIDERS) {
+    const url = h.Voice._internals.buildUrl('父母呼', p.id);
+    assert.ok(url.startsWith('https://'), p.id + ' must be https: ' + url);
+    assert.ok(!/api[_-]?key|token|key=|secret/i.test(url), p.id + ' needs no credential: ' + url);
+  }
+  assert.deepStrictEqual(
+    plain(h.Voice._internals.PROVIDERS).map((p) => p.id),
+    ['google', 'baidu'],
+    'google is primary (24 kHz clip), baidu is the backup',
+  );
+});
+
+test('two concurrent requests for the same clip share one request', async () => {
+  const h = loadEngine();
+  const p = h.Voice._internals.PROVIDERS[0];
+  const [a, b] = await Promise.all([
+    h.Voice._internals.load(p, '汉'),
+    h.Voice._internals.load(p, '汉'),
+  ]);
+  assert.strictEqual(a, b, 'the second caller must get the in-flight promise, not undefined');
+  assert.strictEqual(h.Audio.created.length, 1, 'only one network request');
+  assert.strictEqual(h.Audio.created[0].loadCalls, 1);
+
+  // A prefetch racing a tap on the same word must not duplicate the request either.
+  h.Voice.speak('字');
+  const raced = h.Voice._internals.load(p, '字');
+  await settle(h);
+  assert.ok(raced, 'the racing load must resolve to the same element');
+  assert.strictEqual(h.Audio.created.filter((x) => x.src.includes('%E5%AD%97')).length, 1);
+});
+
+test('a prefetch and a tap that race on one word cost a single request', async () => {
+  const h = loadEngine();
+  h.Voice.prefetch(['母']);
+  h.Voice.speak('母');
+  await settle(h);
+  assert.strictEqual(h.Audio.created.length, 1, 'prefetch and tap must share the clip');
+  assert.strictEqual(h.Voice.stats.neural, 1);
+  assert.ok(h.playing()[0], 'the clip is playing');
 });
