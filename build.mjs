@@ -32,6 +32,8 @@ for (const marker of [
   'PROMPT END',
   'PACE START',
   'PACE END',
+  'HIT START',
+  'HIT END',
   'LEARNED START',
   'LEARNED END',
   'PULSE START',

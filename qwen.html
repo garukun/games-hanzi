@@ -1110,6 +1110,63 @@ const Pace=(()=>{
 })();
 /* ==== PACE END ==== */
 
+/* ==== HIT START ==== */
+/* Tap forgiveness. Not a port — gemini.html hit-tests a circle (`isPointInside`, gemini.html:934)
+   and qwen hit-tests the bubble's DOM box, so both games give a child exactly nothing for a tap
+   that lands a few pixels wide. On a *moving* target that is not a rounding error. Instrumented
+   in Chromium on a 320x568 phone at level 12 (12 bubbles, 71.5px across): measured path speed
+   26 / 33 / 62 px/s for 慢/中/快, i.e. a bubble slides 8-15px while a child is still lining up a
+   finger and 25px at 快. The target is 71.5px wide, so the drift is 35-43% of its width on the
+   fast tier — the game was asking a five-year-old to hit a moving square with a delay they
+   cannot compensate for, and charging a 💧 mistake for it. (gemini.html:1165's
+   `calculateMaxBubblesCap` scales bubble *count* to the play area for the same reason: a
+   crowded board is a board a young hand loses track of.)
+   The forgiveness is invisible, which is the point — a drawn ring would teach a child that the
+   big circle is the target. Slop is a fraction of the radius rather than a pixel constant so it
+   scales with the board: the clamp's ceiling keeps it sane on a tablet, where a 120px bubble
+   would otherwise hand out a 36px ring. */
+const Hit=(()=>{
+  const FRAC=0.3;          // measured: 0.3r absorbs ~325ms of drift at 中 and ~185ms at 快
+  const MIN=6, MAX=14;     // px; the floor covers a 28px radius, the ceiling stops 60px balloons
+  /** How far outside its own radius a bubble may be tapped. */
+  function slop(r){
+    const v=Number(r);
+    return Number.isFinite(v)?Math.max(MIN,Math.min(MAX,v*FRAC)):MIN;
+  }
+  /* Rank by *penetration* — r minus centre distance — not by centre distance. Two things fall
+     out of that. A real hit always outranks a forgiven one, so the fallback can never drag a
+     tap off the bubble it actually landed on. And when two bubbles touch, which they usually
+     do because the collision solver packs them to exactly r1+r2, a tap in the gap is nearest to
+     both centres at once and picking by distance would be a coin flip decided by spawn order;
+     by penetration it goes to whichever bubble the finger is genuinely further into.
+     Ranking by distance *plus* slop would bias the same tie towards the bigger bubble for no
+     reason, which is why the slop is applied to the winner alone, as the acceptance test. */
+  function depth(b,x,y){
+    if(!b||b.dead)return -Infinity;
+    const r=Number(b.r);
+    if(!Number.isFinite(r)||r<=0)return -Infinity;
+    const dx=Number(b.x)-x, dy=Number(b.y)-y, d=Math.sqrt(dx*dx+dy*dy);
+    // A junk row (NaN coordinate, a radius that is not a number) scores NaN, and `NaN > top`
+    // is false, so it is skipped by the search rather than guarded against here — one bad row
+    // must not abort the scan and blind the child to the bubble they did hit.
+    return Number.isFinite(d)?r-d:-Infinity;   // >0 inside the bubble, <0 outside it
+  }
+  /** The bubble a tap at (x,y) should count as hitting, or null. Coordinates are play-area
+      local, the same space b.x/b.y live in. */
+  function nearest(list,x,y){
+    if(!Array.isArray(list)||!list.length)return null;
+    if(!Number.isFinite(x)||!Number.isFinite(y))return null;
+    let best=null,top=-Infinity;
+    for(const b of list){ const p=depth(b,x,y); if(p>top){ top=p; best=b; } }
+    if(!best)return null;
+    return top>=-slop(best.r)?best:null;      // ...no further out than the winner's ring
+  }
+  /** Same question about the game state, so the page's tap handler does not re-derive it. */
+  function at(g,x,y){ return nearest(g&&g.bubbles,x,y); }
+  return {FRAC,MIN,MAX,slop,depth,nearest,at};
+})();
+/* ==== HIT END ==== */
+
 /* ============ STORE ============ */
 const Store=(()=>{
   const K='paopao-guoxue-v2'; let d={stars:{},known:{},best:{},sfx:true,voice:true,engine:'auto',speed:'normal',faces:'on',pace:'normal'};
@@ -1934,10 +1991,23 @@ function smile(b){
   el.classList.add('smile'); b.smT=setTimeout(()=>{ el.classList.remove('smile'); },Faces.REACT_MS);
 }
 
-$('#playArea').addEventListener('pointerup',e=>{
-  const el=e.target.closest&&e.target.closest('.bubble'); if(!el||!el._b)return;
-  tapBubble(el._b,e.clientX,e.clientY);
-});
+/* A tap that missed a bubble used to do *nothing at all* — no word read out, no smile, no
+   sound, nothing that says the screen is listening. That is only tolerable if the target is
+   stationary, and it is not (see Hit above): a bubble slides 8-25px while a child lines up a
+   finger, against a 71.5px target, and the game charged a 💧 mistake for it. So a tap inside a
+   bubble's slop ring counts as that bubble. `boardTap` is a named function rather than an inline
+   arrow so tests/hit.test.js can execute this exact handler against stub bubbles — a
+   string-level assertion cannot tell a wired fallback from a dead one. */
+function boardTap(e){
+  const el=e.target.closest&&e.target.closest('.bubble');
+  if(el&&el._b){ tapBubble(el._b,e.clientX,e.clientY); return; }
+  // No `if(!G)` guard: Hit.at() already treats a missing game as an empty board, so the guard
+  // could not change the outcome — only disagree with it. See tests/hit.test.js.
+  const r=$('#playArea').getBoundingClientRect();
+  const b=Hit.at(G,e.clientX-r.left,e.clientY-r.top);
+  if(b)tapBubble(b,e.clientX,e.clientY);
+}
+$('#playArea').addEventListener('pointerup',boardTap);
 
 function roundWin(){
   G.lock=true; cardReveal(); SFX.sparkle();
