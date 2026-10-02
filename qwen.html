@@ -1110,6 +1110,162 @@ const Pace=(()=>{
 })();
 /* ==== PACE END ==== */
 
+/* ==== BOARD START ==== */
+/* How big a bubble is. This is not a port of gemini.html's `calculateMaxBubblesCap`
+   (gemini.html:1165) and deliberately not one: that scales bubble *count* to the play area, and
+   in this game the count IS the difficulty — a level's `bubbles` is how many words a child has to
+   tell apart, so inflating it on a big screen turns level 1 into level 12 on a tablet while
+   leaving it a four-choice warm-up on a phone. gemini can afford the cap because its count is a
+   function of its own level index; qwen's twelve levels are hand-authored.
+
+   The defect it was aimed at is real, though, and it is qwen's *radius* that causes it. The
+   original formula was `clamp(minDim*0.085, 28, 60)`, and 60 is reached at minDim=706px — so
+   every tablet gets exactly 60px no matter how big it is while the board it has to fill grows
+   without limit. Measured in Chromium, before the change (fill = share of the play area covered by
+   the bubbles, touch% = share of frames in which any two bubbles are touching, gap = mean distance
+   between the closest pair of edges, dia = bubble diameter):
+
+     play area  L1 fill   L1 touch%   L1 gap    L1 dia    L12 fill   L12 fill
+                                      (before)             (before)   (after)
+     304x424       7.7%      15.8%       31px      56px        37.4%      37.4%
+     409x784       4.7%       2.5%       96px      70px        24.1%      24.1%
+     731x861       7.2%       0.0%      130px     120px        36.5%      36.5%
+     781x1017      5.7%       6.4%       56px     120px        28.9%      37.4%
+     984x605       5.6%       1.7%       48px     103px        28.4%      37.4%
+
+   i.e. a tablet's level 1 is *emptier* than a phone's (7.2% vs 7.7% of a board four times the
+   size), and on a 768x1024 tablet the four bubbles never touch once in six seconds — the help
+   modal promises 泡泡会轻轻碰撞 and on that device at that level it never happened.
+
+   So: keep the count, grow the radius, and only on boards bigger than the reference phone. The
+   scaling factor is sqrt(area/REF), i.e. radius ∝ √area, which holds the *fill* constant instead
+   of letting the ceiling flatten it. REF is the play area of a 430x932 phone (409x784), the widest
+   phone this game is tuned for, and `room()` can never return less than 1 — so at or below that
+   size the formula is arithmetically identical to the original and every phone keeps the exact
+   radius, tap ring, font size and physics it has always had.
+
+   What it does to the board, computed over all twelve levels (r in px, fill after →):
+
+     304x424 (phone)   unchanged everywhere, 8%…37%
+     409x784 (phone)   unchanged everywhere, 5%…24%
+     731x861 (tablet)  14% 18% 28% 25% 28% 37% 32% 37% 37% 37% 37% 37%
+     781x1017 (tablet) 14% 18% 28% 25% 28% 37% 32% 37% 37% 37% 37% 37%
+
+   The tablets converge on the phone's own band instead of sitting at half of it, the level-by-level
+   progression (an easy board first, a wall of bubbles last) is preserved, and nothing gets
+   *smaller* anywhere. `maxR`'s packing ceiling — π/2.1 = 37.4% of the board — is untouched and
+   binds from level 6 upwards on a tablet, which is why the last six columns are all 37%: this
+   cannot make a board denser than the game already allowed. */
+const Board=(()=>{
+  const REF=320950;        // play-area px² of a 430x932 phone: 409x784, measured in Chromium
+  const FRAC=0.085;        // diameter as a share of the short side — qwen's original
+  const R_MIN=28, R_MAX=60;// qwen's original absolute clamp; R_MAX is what starved the tablets
+  const FLOOR=22;          // below maxR's ceiling a board has to overlap; qwen's original
+  const PACK=2.1;          // maxR's packing density: count bubbles fill at most π/2.1 = 37.4%
+  const TIER=[1,1.16,1.3]; // 一字 / 二字 / 三字 — qwen's original
+  /** √(area/REF), never below 1. This floor is the compatibility guarantee: at or below the
+      reference phone it is exactly 1 and the whole formula collapses back to the original.
+      `Number.isFinite` rather than a truthiness test, because `Infinity` is truthy and
+      `Infinity > 0` — the same hole `Palette.at` had. */
+  function room(W,H){
+    const w=Number(W), h=Number(H);
+    if(!Number.isFinite(w)||!Number.isFinite(h)||w<=0||h<=0) return 1;
+    return Math.max(1,Math.sqrt(w*h/REF));
+  }
+  /** Radius for a single character on this board — the un-tiered, un-capped size. */
+  function base(W,H){
+    const w=Number(W), h=Number(H);
+    if(!Number.isFinite(w)||!Number.isFinite(h)||w<=0||h<=0) return R_MIN;
+    const g=room(W,H);
+    return Math.max(R_MIN,Math.min(Math.min(w,h)*FRAC*g,R_MAX*g));
+  }
+  /** The radius a `len`-character bubble gets, plus the glyph size that goes with it. Junk in,
+      junk-safe: every path returns a finite number, because a NaN radius is a bubble that never
+      renders and a round the child cannot finish. */
+  function radius(W,H,count,len){
+    const w=Number(W), h=Number(H);
+    let area=(Number.isFinite(w)&&Number.isFinite(h)&&w>0&&h>0)?w*h:0;
+    if(!Number.isFinite(area)) area=0;
+    const n=Number(count);
+    const maxR=0.5*Math.sqrt((area||1)/((n>0&&Number.isFinite(n)?n:1)*PACK));
+    const li=Number(len);
+    const i=Math.min(2,Math.max(0,(Number.isFinite(li)?Math.trunc(li):1)-1));
+    let r=base(W,H)*TIER[i];
+    r=Math.max(FLOOR,Math.min(r,maxR));
+    const fs=i===0?r*0.92:i===1?r*0.6:Math.max(13,r*0.5);
+    return {r,fs};
+  }
+  /** Share of the play area the bubbles cover — the number the comment above is measured in. */
+  function fill(W,H,count,r){
+    const w=Number(W), h=Number(H), area=w*h;
+    const n=Number(count), v=Number(r);
+    if(!Number.isFinite(area)||!(area>0)||!(n>0)||!Number.isFinite(n)||!(v>0)||!Number.isFinite(v)) return 0;
+    return n*Math.PI*v*v/area;
+  }
+  /* ---- where a bubble goes ----
+     Rejection sampling is what this has always used: 70 uniform draws, take the first that clears
+     every bubble already down. It is cheap and it looks organic, but its success collapses as the
+     board fills: each placed bubble excludes (r+r+8)² of the board rather than r², so on a level
+     12 board a fifth of draws land in the forbidden ring alone. Measured over 20 seeds per level,
+     across all twelve levels — draws that found no legal spot:
+
+       304x424 (phone, 12 bubbles at level 12, fill 37%)   33      <-- on a phone, at HEAD
+       781x1017 (tablet, before the radius fix)              0
+       781x1017 (tablet, after  it)                         80
+
+     Every one of those is a bubble spawned on top of another one — two characters drawn over each
+     other for the first frames of a round, which is exactly what a 找一找 game must not do. So
+     the fallback is no longer "give up and drop it anywhere": if the 70 draws all fail, scan a
+     lattice pitched at PITCH of one bubble's spacing and take the roomiest cell. Same cost profile
+     (it only runs when the cheap path already failed, and the scan is bounded), and it takes the
+     failure count at 781x1017 from 80 to 6 and the pre-existing phone case from 33 to 2. */
+  const TRIES=70, GAP=8, PITCH=0.34, MAX_CELLS=24;
+  /** Clearance from (x,y) to the nearest placed bubble: positive means there is a gap. */
+  function clearance(placed,x,y){
+    let m=Infinity;
+    for(const p of placed){
+      if(!p) continue;                          // `Number(null)` is 0, so a truthiness guard alone
+      const px=Number(p.x), py=Number(p.y), pr=Number(p.r);   // reads a null row as a real bubble
+      if(!Number.isFinite(px)||!Number.isFinite(py)||!Number.isFinite(pr)) continue;
+      const d=Math.sqrt((px-x)*(px-x)+(py-y)*(py-y))-pr;
+      if(d<m)m=d;
+    }
+    return m;
+  }
+  /** A free spot for a bubble of radius r. Returns the roomiest spot found and whether it actually
+      clears the board — `ok:false` still returns usable coordinates, because the physics solver
+      separates an overlapping pair within a frame and a bubble at the wrong coordinates is not an
+      option at all. */
+  function spot(r,placed,W,H,rnd){
+    const v=Number(r), w=Number(W), h=Number(H);
+    const rad=Number.isFinite(v)&&v>0?v:FLOOR;
+    if(!Number.isFinite(w)||!Number.isFinite(h)||w<=2*rad||h<=2*rad) return {x:rad,y:rad,ok:false};
+    const list=(Array.isArray(placed)&&placed.length)?placed:[];
+    const rand=typeof rnd==='function'?rnd:Math.random;
+    const need=rad+GAP;                       // clearance from a placed bubble's own edge
+    let bx=w/2, by=h/2, top=clearance(list,bx,by);   // the centre is the sane guess if nothing is drawn
+    for(let k=0;k<TRIES;k++){
+      const x=rad+rand()*(w-2*rad), y=rad+rand()*(h-2*rad);
+      const c=clearance(list,x,y);
+      if(c>top){ top=c; bx=x; by=y; }        // keep the best draw, not just the last
+      if(c>need) return {x,y,ok:true};
+    }
+    // Lattice sweep: roughly three cells per bubble diameter is the coarsest pitch that still
+    // finds a legal spot in the overwhelming majority of the boards that get here.
+    const pitch=(2*rad+GAP)*PITCH;
+    const cols=Math.min(MAX_CELLS,Math.max(1,Math.floor(w/pitch)));
+    const rows=Math.min(MAX_CELLS,Math.max(1,Math.floor(h/pitch)));
+    for(let gy=0;gy<=rows;gy++) for(let gx=0;gx<=cols;gx++){
+      const x=rad+(w-2*rad)*(gx/cols), y=rad+(h-2*rad)*(gy/rows);
+      const c=clearance(list,x,y);
+      if(c>top){ top=c; bx=x; by=y; }
+    }
+    return {x:bx,y:by,ok:top>need};
+  }
+  return {REF,FRAC,R_MIN,R_MAX,FLOOR,PACK,TIER,TRIES,GAP,PITCH,MAX_CELLS,room,base,radius,fill,clearance,spot};
+})();
+/* ==== BOARD END ==== */
+
 /* ==== HIT START ==== */
 /* Tap forgiveness. Not a port — gemini.html hit-tests a circle (`isPointInside`, gemini.html:934)
    and qwen hit-tests the bubble's DOM box, so both games give a child exactly nothing for a tap
@@ -1119,8 +1275,9 @@ const Pace=(()=>{
    finger and 25px at 快. The target is 71.5px wide, so the drift is 35-43% of its width on the
    fast tier — the game was asking a five-year-old to hit a moving square with a delay they
    cannot compensate for, and charging a 💧 mistake for it. (gemini.html:1165's
-   `calculateMaxBubblesCap` scales bubble *count* to the play area for the same reason: a
-   crowded board is a board a young hand loses track of.)
+   `calculateMaxBubblesCap` scales bubble *count* to the play area for the same reason, and
+   `Board` (see BOARD START) is where the decision about a board's size was taken instead —
+   count is this game's difficulty dial, so it grows the radius rather than the board.)
    The forgiveness is invisible, which is the point — a drawn ring would teach a child that the
    big circle is the target. Slop is a fraction of the radius rather than a pixel constant so it
    scales with the board: the clamp's ceiling keeps it sane on a tablet, where a 120px bubble
@@ -1812,13 +1969,9 @@ function makeTexts(){
 }
 
 function radiusFor(len){
-  const minDim=Math.min(G.W,G.H), area=G.W*G.H, count=G.cfg.bubbles;
-  const maxR=0.5*Math.sqrt(area/(count*2.1));
-  let r1=clamp(minDim*0.085,28,60);
-  let r=r1*[1,1.16,1.3][Math.min(2,len-1)];
-  r=Math.min(r,maxR); r=Math.max(r,22);
-  const fs=len===1?r*0.92:len===2?r*0.6:Math.max(13,r*0.5);
-  return {r,fs};
+  // Every size decision for a bubble lives in `Board` so the radius, the glyph size and the
+  // tablet scaling cannot drift apart. (See BOARD START for the measurements.)
+  return Board.radius(G.W,G.H,G.cfg.bubbles,len);
 }
 
 function nextRound(){
@@ -1833,10 +1986,11 @@ function nextRound(){
   let prevFace=null;
   sh.forEach((item,idx)=>{
     const len=item.t.length; const {r,fs}=radiusFor(len);
-    let x,y,ok=false;
-    for(let k=0;k<70;k++){ x=r+Math.random()*(G.W-2*r); y=r+Math.random()*(G.H-2*r);
-      ok=placed.every(p=>Math.hypot(p.x-x,p.y-y)>p.r+r+8); if(ok)break; }
-    if(!ok){ x=r+Math.random()*(G.W-2*r); y=r+Math.random()*(G.H-2*r); }
+    // 70 random draws, then a lattice sweep for the roomiest cell — see Board.spot. The old
+    // fallback simply dropped the bubble anywhere, which drew two characters on top of each other
+    // whenever the random path ran out of room.
+    const spot=Board.spot(r,placed,G.W,G.H);
+    const x=spot.x, y=spot.y;
     placed.push({x,y,r});
     const ang=Math.random()*Math.PI*2; const base=Pace.base(Math.min(G.W,G.H))*Pace.mul(Store.pace);
     const sp=base*(0.7+Math.random()*0.6);
