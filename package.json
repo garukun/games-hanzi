@@ -1,0 +1,11 @@
+{
+  "name": "paopao-guoxue",
+  "version": "1.0.0",
+  "private": true,
+  "description": "泡泡国学堂 — a single-file Chinese literacy game for young children",
+  "scripts": {
+    "build": "node build.mjs",
+    "check:build": "node build.mjs --check",
+    "test": "node --test tests/"
+  }
+}

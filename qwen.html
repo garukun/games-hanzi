@@ -198,6 +198,14 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
   border:3px solid var(--ink);flex:0 0 auto;}
 .helpRow p{margin:0;font-weight:700;font-size:14px;line-height:1.4;}
 .helpNote{background:#fff6d8;border:2px dashed var(--amber);border-radius:14px;padding:8px 12px;font-size:12px;font-weight:700;color:#a06a10;margin:12px 0;}
+.setRow{display:flex;align-items:center;gap:10px;margin:10px 0;}
+.setLab{font-family:var(--disp);font-size:17px;color:var(--ink);min-width:76px;}
+.segs{display:flex;gap:6px;flex:1;}
+.seg{flex:1;font-family:var(--disp);font-size:15px;padding:6px 4px;border:3px solid var(--ink);border-radius:999px;
+  background:#fff;box-shadow:0 3px 0 rgba(43,58,85,.16);transition:transform .08s,box-shadow .08s,background .2s;}
+.seg:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(43,58,85,.16);}
+.seg.on{background:var(--teal);color:#fff;box-shadow:0 3px 0 #1c9385;}
+#btnEngineTag{font-size:11px;font-weight:900;}
 
 /* ---------- TOAST / CONFETTI ---------- */
 #toastLayer{position:fixed;inset:0;z-index:30;pointer-events:none;}
@@ -371,7 +379,14 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
     <div class="helpRow"><span class="he" style="background:var(--coral)">🔊</span><p>点喇叭，<b>听</b>一个汉字或词的声音。</p></div>
     <div class="helpRow"><span class="he" style="background:var(--teal)">👀</span><p>在飘动的泡泡里<b>找</b>出它，泡泡会轻轻碰撞哦。</p></div>
     <div class="helpRow"><span class="he" style="background:var(--amber)">👆</span><p>点对了会夸你，点错了也会<b>读</b>给你听，再试试！</p></div>
-    <div class="helpNote"> 给小朋友玩时，请打开设备声音，并允许网页朗读语音。</div>
+    <div class="setRow"><span class="setLab">🎙 发音</span><div class="segs" id="optEngine">
+      <button class="seg" data-v="auto">自动</button><button class="seg" data-v="neural">AI</button><button class="seg" data-v="local">系统</button>
+    </div></div>
+    <div class="setRow"><span class="setLab">🐢 语速</span><div class="segs" id="optSpeed">
+      <button class="seg" data-v="slow">慢</button><button class="seg" data-v="normal">正常</button>
+    </div></div>
+    <div class="helpNote"> 发音默认走「自动」：先尝试普通话神经网络人声，读不准时自动改用系统语音。
+      给小朋友玩时，请打开设备声音，并允许网页朗读语音。</div>
     <button class="btn3d teal" id="btnHelpOk" style="width:100%">知道啦！</button>
   </div>
 </div>
@@ -479,35 +494,232 @@ const SFX=(()=>{
   };
 })();
 
-/* ============ TTS ============ */
-const TTS=(()=>{
-  const synth=window.speechSynthesis; let voice=null,on=true,curId=0,q=[],speaking=false;
-  function pick(){ if(!synth)return; const vs=synth.getVoices(); let cands=vs.filter(v=>/^zh/i.test(v.lang));
-    voice=cands.find(v=>/CN|Hans|Tingting|Meijia/i.test(v.lang+v.name))||cands[0]||vs.find(v=>/zh/i.test(v.lang))||null; }
-  if(synth){ pick(); synth.onvoiceschanged=pick; }
-  function pump(){ if(speaking||!q.length)return; const it=q.shift(); speaking=true; const u=new SpeechSynthesisUtterance(it.text);
-    if(voice)u.voice=voice; u.lang=voice?voice.lang:'zh-CN'; u.rate=it.rate||.88; u.pitch=it.pitch||1.1; u.volume=1;
-    const fin=()=>{ if(it.id!==curId)return; speaking=false; it.onend&&it.onend(); pump(); };
-    u.onend=fin;u.onerror=fin;
-    setTimeout(()=>{ if(it.id!==curId)return; try{ if(synth.paused)synth.resume(); synth.speak(u);}catch(e){fin();} },35); }
+/* ==== VOICE ENGINE START ==== (extracted verbatim by tests/voice.test.js — keep self-contained) */
+/* ============ VOICE (neural TTS, local fallback) ============
+ * Primary engine: Google Translate's neural Chinese voice, streamed to the page as MP3 and
+ * played through a plain <audio> element. It needs no API key, is free, and is dramatically
+ * more accurate than the OS speech engine — many Android devices ship *no* zh voice at all,
+ * so speechSynthesis happily reads 汉字 with an English voice. The endpoint sends no CORS
+ * headers, which is fine: we never fetch() it, the media element loads it directly.
+ * If the network engine is unreachable we demote to window.speechSynthesis and stay there.
+ */
+const Voice=(()=>{
+  const SYNTH=window.speechSynthesis||null;
+  const HOST='https://translate.google.com/translate_tts';
+  // The endpoint quantises ttsspeed: anything >= 0.4 is ignored, <= 0.3 buys ~19% more air.
+  const SPEED={slow:0.3,normal:1};
+  const LOCAL_RATE={slow:0.62,normal:0.88};
+  const CHUNK=90;          // chars per request (well under the endpoint's 200 cap)
+  const LOAD_TIMEOUT=5000; // ms to wait for mp3 before demoting to the local engine
+  const CACHE_MAX=240;     // LRU-ish cap so long sessions don't grow unbounded
+  const PRE_MAX=3;         // concurrent prefetches (be nice to a free endpoint)
+  const PRE_GAP=130;       // ms between prefetch starts
+  const NET_GIVEUP=2;      // consecutive failures before auto mode stops trying the network
+  // 1 frame of near-silence: unlocking the audio session inside a user gesture is required on
+  // iOS Safari, and it must not make a network request to do it.
+  const SILENT='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=';
+
+  let engine='auto';            // 'auto' | 'neural' | 'local'
+  let on=true;
+  let speed='normal';
+  let localVoice=null;
+  let netFail=0;
+  let epoch=0;                  // bumped on interrupt so stale items are dropped
+  let queue=[];
+  let playing=false;
+  let primed=false;
+  let preCount=0, preTimer=0;
+  const cache=new Map();        // "speed|text" -> HTMLAudioElement
+  const pending=new Map();      // "speed|text" -> {a,rej}
+  const stats={neural:0,local:0,errors:0};
+
+  function pickLocal(){ if(!SYNTH)return; const vs=SYNTH.getVoices()||[]; const zh=vs.filter(v=>/^zh/i.test(v.lang));
+    localVoice=zh.find(v=>/CN|Hans|Tingting|Meijia|Sinji|Yaoyao/i.test(v.lang+v.name))||zh[0]
+      ||vs.find(v=>/zh/i.test(v.lang))||null; }
+  if(SYNTH){ try{ pickLocal(); SYNTH.onvoiceschanged=pickLocal; }catch(e){} }
+
+  function key(text){ return speed+'|'+text; }
+
+  function buildUrl(text){
+    // Spaces and newlines are legal but the endpoint answers 400 on an empty q, so guard here.
+    const clean=String(text).replace(/[\r\n]+/g,' ').trim();
+    if(!clean)return '';
+    return HOST+'?ie=UTF-8&client=tw-ob&tl=zh-CN&ttsspeed='+SPEED[speed]+'&q='+encodeURIComponent(clean);
+  }
+
+  // Split over-long text on punctuation so phrases keep their natural phrasing.
+  function chunk(text){
+    const s=String(text).trim(); if(!s)return [];
+    if(s.length<=CHUNK)return [s];
+    const PUNCT=/[，。！？、；：,.!?;:…—～]/;
+    const out=[]; let rest=s;
+    while(rest.length>CHUNK){
+      // Break just after the last punctuation mark inside the window, so the
+      // request stays short without slicing a sentence in half.
+      let cut=-1;
+      for(let i=CHUNK;i>0;i--){ if(PUNCT.test(rest.charAt(i-1))){ cut=i; break; } }
+      if(cut<1)cut=CHUNK;
+      out.push(rest.slice(0,cut));
+      rest=rest.slice(cut);
+    }
+    if(rest.trim())out.push(rest.trim());
+    return out.length?out:[s];
+  }
+
+  // Fetch (really: preload) one clip. Resolves with an <audio> ready to play.
+  function load(text){
+    const k=key(text);
+    const hit=cache.get(k); if(hit){ cache.delete(k); cache.set(k,hit); return Promise.resolve(hit); }
+    const inflight=pending.get(k); if(inflight)return inflight.p;
+    const url=buildUrl(text);
+    if(!url)return Promise.reject(new Error('empty'));
+    let a;
+    try{ a=new Audio(); }catch(e){ return Promise.reject(e); }
+    a.preload='auto'; a.playsInline=true; a.src=url;
+    const p=new Promise((res,rej)=>{
+      const timer=setTimeout(()=>{ cleanup(); rej(new Error('timeout')); },LOAD_TIMEOUT);
+      function cleanup(){ clearTimeout(timer); a.removeEventListener('canplaythrough',ok); a.removeEventListener('error',bad); }
+      function ok(){ cleanup(); res(a); }
+      function bad(){ cleanup(); rej(new Error('network')); }
+      a.addEventListener('canplaythrough',ok); a.addEventListener('error',bad);
+      try{ a.load(); }catch(e){ cleanup(); rej(e); }
+    }).then(a=>{ pending.delete(k); cache.set(k,a); if(cache.size>CACHE_MAX)cache.delete(cache.keys().next().value); return a; },
+           e=>{ pending.delete(k); throw e; });
+    pending.set(k,{a,p});
+    return p;
+  }
+
+  function neuralFail(e){
+    stats.errors++; netFail++;
+    if(typeof console!=='undefined'&&console.debug)console.debug('[Voice] neural unavailable, falling back to system voice',e);
+  }
+
+  function playNeural(item,parts){
+    let i=0;
+    const step=()=>{
+      if(item.e!==epoch||!on)return done();
+      if(i>=parts.length)return done();
+      const part=parts[i++];
+      load(part).then(a=>{
+        if(item.e!==epoch||!on)return done();
+        stats.neural++;
+        a.currentTime=0;
+        const p=a.play();
+        const bail=()=>{ if(item.e===epoch){ try{a.pause();}catch(_){} } };
+        const finish=()=>{ if(item.e!==epoch)return; try{a.pause();}catch(_){} step(); };
+        a.onended=finish; a.onerror=finish;
+        if(p&&p.catch) p.catch(err=>{ if(err&&err.name==='NotAllowedError'){ netFail=NET_GIVEUP; } bail(); done(); });
+      }).catch(err=>{ // network engine down — never strand the child in silence
+        neuralFail(err);
+        if(localSpeak(item))return;
+        done();
+      });
+    };
+    // Always release the claim, even for a superseded item, or the queue deadlocks.
+    const done=()=>{ playing=false; if(item.e!==epoch)return; item.onend&&item.onend(); pump(); };
+    step();
+  }
+
+  function localSpeak(item){
+    if(!SYNTH)return false;
+    try{
+      const parts=chunk(item.text); let i=0;
+      const finish=()=>{ playing=false; if(item.e!==epoch)return; item.onend&&item.onend(); pump(); };
+      const step=()=>{
+        if(item.e!==epoch||!on)return finish();
+        if(i>=parts.length)return finish();
+        const u=new SpeechSynthesisUtterance(parts[i++]);
+        if(localVoice)u.voice=localVoice;
+        u.lang=localVoice?localVoice.lang:'zh-CN';
+        u.rate=item.rate||LOCAL_RATE[speed]||LOCAL_RATE.normal;
+        u.pitch=item.pitch||1.1; u.volume=1;
+        u.onend=step; u.onerror=step;
+        setTimeout(()=>{ if(item.e!==epoch)return finish();
+          try{ if(SYNTH.paused)SYNTH.resume(); SYNTH.speak(u); }catch(e){ finish(); } },30);
+      };
+      stats.local++; step(); return true;
+    }catch(e){ return false; }
+  }
+
+  function pump(){
+    if(playing)return;
+    while(queue.length){
+      const item=queue.shift();
+      if(item.e!==epoch||!on)continue;         // superseded while waiting its turn
+      playing=true;                            // claim synchronously: a load is in flight
+      const useNet=engine==='neural'||(engine==='auto'&&netFail<NET_GIVEUP);
+      if(useNet)return playNeural(item,chunk(item.text));
+      if(localSpeak(item))return;
+      playing=false;                           // nothing on this device can speak it
+      item.onend&&item.onend();
+    }
+  }
+
+  function stop(){
+    epoch++; queue=[]; playing=false;
+    for(const k of cache.keys()){ const a=cache.get(k); try{ a.pause(); }catch(e){} }
+    if(SYNTH){ try{ SYNTH.cancel(); }catch(e){} }
+  }
+
+  // Warm the cache for a level's vocabulary so the first tap is instant.
+  // Speeds itself so a whole 60-word level never hammers the free endpoint at once.
+  let preQueue=[];
+  function prefetch(texts){
+    const seen=new Set();
+    (Array.isArray(texts)?texts:[texts]).forEach(t=>{ const s=String(t||'').trim(); if(!s||seen.has(key(s)))return;
+      if(cache.has(key(s))||pending.has(key(s)))return; seen.add(key(s)); preQueue.push(s); });
+    if(preQueue.length&&!preTimer)preTimer=setTimeout(preStep,PRE_GAP);
+  }
+  function preStep(){
+    preTimer=0;
+    while(preCount<PRE_MAX&&preQueue.length){
+      const t=preQueue.shift();
+      preCount++;
+      load(t).catch(()=>{}).then(()=>{ preCount=Math.max(0,preCount-1); if(preQueue.length&&!preTimer)preTimer=setTimeout(preStep,PRE_GAP); });
+    }
+  }
+
+  function prime(){ // must be called synchronously from a user gesture
+    if(primed)return; primed=true;
+    try{ const a=new Audio(SILENT); a.volume=0.01; const p=a.play(); if(p&&p.catch)p.catch(()=>{}); }catch(e){}
+    if(SYNTH){ try{ SYNTH.cancel(); const u=new SpeechSynthesisUtterance(''); u.lang='zh-CN'; SYNTH.speak(u); }catch(e){} }
+  }
+
   return {
-    setOn(v){on=v; if(!v){curId++;q=[];speaking=false;try{synth&&synth.cancel();}catch(e){}}},
-    get on(){return on;},
-    speak(text,opt={}){ if(!on||!synth){opt.onend&&opt.onend();return;}
-      if(opt.interrupt!==false){curId++;q=[];try{synth.cancel();}catch(e){}speaking=false;}
-      q.push({text,opt,onend:opt.onend,rate:opt.rate,pitch:opt.pitch,id:curId}); pump(); }
+    speak(text,opt={}){
+      const s=String(text||'').trim();
+      if(!s)return;
+      if(!on){ opt.onend&&opt.onend(); return; }
+      if(opt.interrupt!==false)stop();
+      queue.push({text:s,onend:opt.onend,rate:opt.rate,pitch:opt.pitch,e:epoch});
+      pump();
+    },
+    prefetch, prime, stop,
+    setOn(v){ if(on===v)return; on=v; if(!v)stop(); },
+    get on(){ return on; },
+    setEngine(v){ if(v!=='auto'&&v!=='neural'&&v!=='local')return; engine=v; netFail=0; },
+    get engine(){ return engine; },
+    // 'auto' reports which engine actually carried the last utterance.
+    get activeEngine(){ return stats.neural>=stats.local?'neural':'local'; },
+    setSpeed(v){ if(v!=='slow'&&v!=='normal')return; speed=v; },
+    get speed(){ return speed; },
+    get stats(){ return Object.assign({},stats,{cached:cache.size,queued:queue.length}); },
+    _internals:{ buildUrl, chunk, key, load, SPEED, CHUNK, CACHE_MAX, LOAD_TIMEOUT }
   };
 })();
+/* ==== VOICE ENGINE END ==== */
 
 /* ============ STORE ============ */
 const Store=(()=>{
-  const K='paopao-guoxue-v2'; let d={stars:{},sfx:true,voice:true};
+  const K='paopao-guoxue-v2'; let d={stars:{},sfx:true,voice:true,engine:'auto',speed:'normal'};
   function load(){ try{const s=JSON.parse(localStorage.getItem(K)); if(s)d=Object.assign(d,s);}catch(e){} }
   function save(){ try{localStorage.setItem(K,JSON.stringify(d));}catch(e){} }
   load();
   return { get stars(){return d.stars;}, get sfx(){return d.sfx;}, get voice(){return d.voice;},
+    get engine(){return d.engine;}, get speed(){return d.speed;},
     setStar(id,n){ d.stars[id]=Math.max(d.stars[id]||0,n); save(); },
-    setSfx(v){d.sfx=v;save();}, setVoice(v){d.voice=v;save();} };
+    setSfx(v){d.sfx=v;save();}, setVoice(v){d.voice=v;save();},
+    setEngine(v){d.engine=v;save();}, setSpeed(v){d.speed=v;save();} };
 })();
 
 /* ============ CONFETTI ============ */
@@ -554,13 +766,29 @@ $('#mImg2').src=MASCOT2; $('#mImg2').onerror=function(){this.style.display='none
 function syncToggles(){ $('#tglSfx').classList.toggle('off',!Store.sfx); $('#tglVoice').classList.toggle('off',!Store.voice);
   $('#tglSfx').querySelector('.ic').textContent=Store.sfx?'🔊':'🔇'; $('#tglVoice').querySelector('.ic').textContent=Store.voice?'🗣️':'🔕';
   $('#btnMute').textContent=(Store.sfx&&Store.voice)?'🔊':'';
-  SFX.setOn(Store.sfx); TTS.setOn(Store.voice); }
+  SFX.setOn(Store.sfx); Voice.setOn(Store.voice);
+  Voice.setEngine(Store.engine); Voice.setSpeed(Store.speed);
+  $$('#optEngine .seg').forEach(b=>b.classList.toggle('on',b.dataset.v===Store.engine));
+  $$('#optSpeed .seg').forEach(b=>b.classList.toggle('on',b.dataset.v===Store.speed)); }
+function wireSeg(id,get,set){ $$(id+' .seg').forEach(b=>{ b.onclick=()=>{ SFX.click(); set(b.dataset.v); syncToggles(); }; }); }
+wireSeg('#optEngine',()=>Store.engine,v=>Store.setEngine(v));
+wireSeg('#optSpeed',()=>Store.speed,v=>Store.setSpeed(v));
 $('#tglSfx').onclick=()=>{ Store.setSfx(!Store.sfx); if(Store.sfx){SFX.ensure();SFX.click();} syncToggles(); };
-$('#tglVoice').onclick=()=>{ Store.setVoice(!Store.voice); if(Store.voice)TTS.speak('语音已打开'); syncToggles(); };
+$('#tglVoice').onclick=()=>{ Store.setVoice(!Store.voice); if(Store.voice){Voice.prime();Voice.speak('语音已打开');} syncToggles(); };
 $('#btnMute').onclick=()=>{ const anyOn=Store.sfx||Store.voice; Store.setSfx(!anyOn); Store.setVoice(!anyOn);
-  if(!anyOn){SFX.ensure();SFX.click();TTS.speak('声音打开啦');} syncToggles(); };
-$('#btnHelp').onclick=()=>$('#modalHelp').classList.add('show');
+  if(!anyOn){SFX.ensure();SFX.click();Voice.prime();Voice.speak('声音打开啦');} syncToggles(); };
+$('#btnHelp').onclick=()=>{ syncToggles(); $('#modalHelp').classList.add('show'); };
 $('#btnHelpOk').onclick=()=>$('#modalHelp').classList.remove('show');
+// Warm the network TTS cache for a level's whole vocabulary while the child reads the intro.
+function prefetchLevel(cfg){
+  if(!cfg)return;
+  const items=cfg.type==='phrase'?cfg.pool.map(p=>p[0]).concat(cfg.pool.map(p=>p[1]))
+    :(typeof cfg.pool[0]==='string'?cfg.pool:[]);
+  if(!items.length)return;
+  if(Voice.engine==='local')return;
+  const warm=()=>Voice.prefetch(items);
+  if(window.requestIdleCallback)requestIdleCallback(warm,{timeout:2500}); else setTimeout(warm,400);
+}
 
 /* ============ LEVEL MAP ============ */
 function unlocked(id){ return id===1 || (Store.stars[id-1]||0)>=1; }
@@ -608,6 +836,7 @@ function startLevel(id){
   $('#playArea').innerHTML='<div id="comboChip"></div>';
   measure();
   nextRound();
+  prefetchLevel(cfg);
   if(!G.raf)loop(performance.now());
 }
 function buildDots(){ const w=$('#dotsWrap'); w.innerHTML=''; for(let i=0;i<G.cfg.rounds;i++){ const d=document.createElement('span'); d.className='dot'; w.appendChild(d); } }
@@ -678,15 +907,14 @@ function nextRound(){
     G.bubbles.push(b);
   });
   cardListen();
-  setTimeout(()=>{ if(!G||G.sid!==arguments.callee.sid)return; },0);
   const sid=G.sid;
   setTimeout(()=>{ if(!G||G.sid!==sid)return; G.lock=false; speakTarget(); },650);
 }
 
 function speakTarget(){
   const rt=G.rt; const txt=rt.type==='phrase'?rt.a:rt.text;
-  setSpeaking(true); TTS.speak(txt,{onend:()=>setSpeaking(false)});
-  if(!TTS.on)setTimeout(()=>setSpeaking(false),900);
+  setSpeaking(true); Voice.speak(txt,{onend:()=>setSpeaking(false)});
+  if(!Voice.on)setTimeout(()=>setSpeaking(false),900);
 }
 function setSpeaking(v){ $('#btnSpeak').classList.toggle('speaking',v); }
 
@@ -706,17 +934,17 @@ function cardReveal(){
 
 $('#btnSpeak').onclick=()=>{ if(!G)return; SFX.click(); speakTarget(); };
 $('#btnHint').onclick=()=>{ if(!G)return; SFX.click(); const rt=G.rt;
-  if(rt.type==='phrase'){ setSpeaking(true); TTS.speak(rt.a+'，'+rt.b,{onend:()=>setSpeaking(false)});
+  if(rt.type==='phrase'){ setSpeaking(true); Voice.speak(rt.a+'，'+rt.b,{onend:()=>setSpeaking(false)});
     $('#pSub').innerHTML='<span class="py">提示：'+rt.bpy+'</span>'; }
-  else { setSpeaking(true); TTS.speak(rt.text,{onend:()=>setSpeaking(false)});
+  else { setSpeaking(true); Voice.speak(rt.text,{onend:()=>setSpeaking(false)});
     $('#pSub').innerHTML='<span class="py">提示：'+rt.py+'</span>'; }
-  if(!TTS.on)setTimeout(()=>setSpeaking(false),900);
+  if(!Voice.on)setTimeout(()=>setSpeaking(false),900);
 };
 
 function tapBubble(b,clientX,clientY){
   if(G.lock||b.dead)return;
   SFX.tap(); b.vy-=26; b.vx+=(Math.random()-.5)*20;
-  TTS.speak(b.text,{interrupt:true});
+  Voice.speak(b.text,{interrupt:true});
   if(b.isTarget&&!b.found){
     b.found=true; b.dead=true; G.found++; G.streak++; G.maxStreak=Math.max(G.maxStreak,G.streak);
     vib(20); SFX.ding();
@@ -746,7 +974,7 @@ $('#playArea').addEventListener('pointerup',e=>{
 function roundWin(){
   G.lock=true; cardReveal(); SFX.sparkle();
   const pr=pick(['真棒','太厉害了','好样的','答对啦','你真聪明','小明星']);
-  TTS.speak(pr,{interrupt:false});
+  Voice.speak(pr,{interrupt:false});
   const sid=G.sid;
   setTimeout(()=>{ if(!G||G.sid!==sid)return;
     if(G.round<G.cfg.rounds)nextRound(); else levelClear(); },1700);
@@ -810,7 +1038,7 @@ function step(dt){
 function render(){ for(const b of G.bubbles){ if(b.dead)continue; b.el.style.transform='translate3d('+(b.x-b.r)+'px,'+(b.y-b.r)+'px,0)'; b.el.style.setProperty('--pos','translate3d('+(b.x-b.r)+'px,'+(b.y-b.r)+'px,0)'); } }
 
 /* ============ NAV ============ */
-$('#btnStart').onclick=()=>{ SFX.ensure(); SFX.click(); TTS.speak('开始啦'); startLevel(continueId()); };
+$('#btnStart').onclick=()=>{ SFX.ensure(); SFX.click(); Voice.prime(); Voice.speak('开始啦'); startLevel(continueId()); };
 $('#btnLevels').onclick=()=>{ SFX.click(); show('scr-levels'); renderMap(); };
 $('#btnBackMap').onclick=()=>{ SFX.click(); show('scr-start'); };
 
@@ -824,7 +1052,8 @@ document.addEventListener('contextmenu',e=>e.preventDefault());
 document.addEventListener('gesturestart',e=>e.preventDefault());
 let firstGesture=false;
 document.addEventListener('pointerdown',function once(){ if(firstGesture)return; firstGesture=true; SFX.ensure(); SFX.resume();
-  if(TTS.on)TTS.speak(' ',{rate:1}); },{once:false});
+  Voice.prime(); },{once:false});
+document.addEventListener('visibilitychange',()=>{ if(document.hidden)Voice.stop(); });
 
 /* ============ INIT ============ */
 syncToggles();
