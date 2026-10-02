@@ -400,7 +400,10 @@ test('the level name lives in its own span, so a narrow screen can drop just tha
   assert.ok(src.includes('id="lvlNo"'), 'the level number needs its own span');
   const w = wiring();
   assert.ok(w.startLevel.includes("$('#lvlNo').textContent=id"), w.startLevel);
-  assert.ok(w.startLevel.includes("$('#lvlName').textContent=' · '+cfg.name"), w.startLevel);
+  assert.ok(
+    w.startLevel.includes("$('#lvlName').textContent=rev?Review.LABEL:' · '+cfg.name"),
+    w.startLevel,
+  );
   // Writing straight into #lvlChip would destroy both spans on the first level start.
   assert.ok(!w.startLevel.includes("$('#lvlChip').textContent="), w.startLevel);
 });

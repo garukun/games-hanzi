@@ -134,6 +134,23 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
    record anywhere; this is the reason to replay a level you have already cleared. */
 .nodeBest{font-weight:800;font-size:clamp(9px,2.2vmin,12px);color:var(--ink2);line-height:1;
   min-height:1em;font-variant-numeric:tabular-nums;}
+/* 总复习 is not "第13关" — it is a board assembled from every level, so the numeric prefix is
+   hidden and the name carries the chip. `.lvlPre`/`.lvlNo`/`.lvlPost` exist as *classes* (not
+   just ids) for exactly this reason: the 第 and 关 are raw text nodes, which CSS cannot hide,
+   and a selector written against a class the element does not carry silently matches nothing. */
+.lvlChip.review .lvlPre,.lvlChip.review .lvlNo,.lvlChip.review .lvlPost{display:none;}
+/* Beats the narrow-phone `.lvlChip .lname{display:none}` on specificity, so a review level
+   is still identifiable on a 320px screen where a numbered level's name is dropped. */
+.lvlChip.review .lname{display:inline;}
+/* No `display` here on purpose: the [hidden] UA rule is specificity (0,1,0), so an author
+   rule for this selector at the same weight would beat it and the button would show on a
+   fresh profile. */
+.mapFoot{flex:0 0 auto;padding:2px 4px 6px;text-align:center;}
+.mapFoot .btn3d{width:100%;max-width:440px;}
+.mapFootNote{margin:6px 2px 0;font-size:12px;line-height:1.5;
+  /* --ink, not --ink2: this line lands on the green hill, not on the sky, and #5a6b88 there
+     measures 2.19:1 (hill2) to 2.95:1 (hill1). #2b3a55 clears 4.5:1 on both hill stops. */
+  color:var(--ink);}
 /* A fourth chip in this header squeezed 选择关卡 onto four lines at 320px (56px -> 90px of
    header). The running total is the redundant one — every level already prints its own
    record underneath its stars — so it is the thing that goes. */
@@ -171,6 +188,10 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
   .lvlChip .lname{display:none;}
   .lvlChip{padding:5px 9px;}
   .scoreChip{padding:5px 8px;}
+  /* A review keeps its name (it is the only thing identifying the board) but loses the kind:
+     总复习 · 字 is 102px wide against a numbered level's 53px, which wraps this row to two
+     lines — measured 46px -> 131px at 320 wide, 85px straight off the play area. */
+  .lvlChip .lkind{display:none;}
 }
 #promptCard{display:flex;align-items:center;gap:12px;background:var(--paper);border:3px solid var(--ink);border-radius:22px;
   padding:8px 12px;box-shadow:0 6px 0 rgba(43,58,85,.18);transition:background .3s;}
@@ -300,6 +321,12 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
   .cStar{font-size:34px;}
   .cTitle{font-size:26px;margin:4px 0 2px;}
   .clGrid{max-height:min(24vh,120px);}
+  /* The footer is the one thing on this screen that can be trimmed without hiding content:
+     measured at 320x568 the map needs 411px and the full-size footer leaves it 404, i.e. the
+     last row's 得分 record was clipped. Compact here and the map gets its 7px back. */
+  .mapFoot{padding:0 4px 2px;}
+  .mapFoot .btn3d{padding:7px 14px;font-size:17px;}
+  .mapFootNote{margin:3px 2px 0;font-size:11px;}
 }
 .cBtns{display:flex;flex-direction:column;gap:10px;}
 
@@ -463,6 +490,10 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
       <span class="chip" id="totalStars">⭐ 0/36</span>
     </div>
     <div class="mapWrap" id="mapWrap"></div>
+    <div class="mapFoot" id="mapFoot" hidden>
+      <button class="btn3d teal" id="btnReview">🎲 总复习</button>
+      <p class="mapFootNote">十二关全部通关啦！来复习学过的字、词和句子 🎉</p>
+    </div>
   </section>
 
   <!-- GAME -->
@@ -470,7 +501,7 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
     <div class="gameCol">
       <header id="hud">
         <button class="iconBtn" id="btnHome">🏠</button>
-        <span class="lvlChip" id="lvlChip">第<span id="lvlNo">1</span>关<span class="lname" id="lvlName"></span></span>
+        <span class="lvlChip" id="lvlChip"><span class="lvlPre">第</span><span class="lvlNo" id="lvlNo">1</span><span class="lvlPost">关</span><span class="lname" id="lvlName"></span><span class="lkind" id="lvlKind"></span></span>
         <span class="lvlChip scoreChip" id="scoreChip">⭐<span id="scoreN">0</span></span>
         <div class="dots" id="dotsWrap"></div>
         <span class="missChip" id="missChip">💧<span id="missN">0</span></span>
@@ -1125,14 +1156,103 @@ function prefetchLevel(cfg){
   if(window.requestIdleCallback)requestIdleCallback(warm,{timeout:2500}); else setTimeout(warm,400);
 }
 
+/* ==== REVIEW START ==== */
+/* The dead end qwen shipped with. continueId() returned a hard-coded 12, so a child who had
+ * 3-starred all twelve levels dropped back into level 12 — forever, with nothing left to
+ * find. gemini.html never hit this because it had no persistence at all; the moment
+ * Store.stars exists, "what next?" needs an answer.
+ *
+ * The answer is a review level: an ordinary level config assembled from every level of one
+ * type — 93 characters, 52 words or 45 couplet halves in the shipped tables — shuffled down
+ * to a fresh sample each time. It is deliberately *type-homogeneous*: a round has a single
+ * cfg.type, and makeTexts(), Prompt.say() and pyOf() all branch on it, so a genuinely mixed
+ * board would put three different prompts in front of a child at once. Mixing across levels
+ * within a type is where the value is anyway: a 形近字 aced in level 2 turns up next to a
+ * 三字经 half from level 10.
+ *
+ * Every input is an argument, so this is a pure function of (levels, stars) and
+ * tests/review.test.js can run the shipped code against the real tables with no DOM, no
+ * Store and no Math.random. */
+const Review=(()=>{
+  const ID=13;                       // LEVELS.length+1 — an id no map node can claim
+  const LABEL='总复习';
+  const TYPES=['char','word','phrase'];
+  const KIND={char:'字',word:'词',phrase:'句子'};
+  const ROUNDS=8;
+  // bubbles/conf per type. char keeps the hardest 形近字 rate any char level uses, because a
+  // review is played by a child who has already aced all of them.
+  const SHAPE={char:{bubbles:7,conf:true},word:{bubbles:7,conf:false},phrase:{bubbles:8,conf:false}};
+  const EXTRA=3;                     // sample a few more than the board needs, so distractors exist
+
+  function norm(t){ return TYPES.indexOf(t)>-1?t:TYPES[0]; }
+  /** A random review type, so three reviews in a row are not the same drill three times. */
+  function type(){ return TYPES[(Math.random()*TYPES.length)|0]; }
+  /** Every entry every level of `type` offers, de-duplicated, in level order.
+      Never aliases a level's own pool — appending to it would make review words playable
+      bubbles in that level (the bug prefetchLevel used to have). */
+  function pool(levels,t){
+    t=norm(t); const out=[],seen={};
+    for(const L of (levels||[])){
+      if(!L||L.type!==t||!Array.isArray(L.pool))continue;
+      for(const it of L.pool){
+        const k=t==='phrase'?it[0]:it;      // couplets are keyed by their first half
+        if(typeof k!=='string'||!k)continue;
+        if(seen[k])continue; seen[k]=1; out.push(it);
+      }
+    }
+    return out;
+  }
+  /** Fisher-Yates over a copy, then take n. Takes `rnd` so tests are deterministic, and
+      clamps the index because a seeded rng returning exactly 1 would otherwise index past
+      the end and write `undefined` into the board. */
+  function sample(list,n,rnd){
+    const r=typeof rnd==='function'?rnd:Math.random;
+    const a=(list||[]).slice();
+    for(let i=a.length-1;i>0;i--){
+      let j=Math.floor(r()*(i+1)); if(!Number.isFinite(j)||j>i)j=i; if(j<0)j=0;
+      const t=a[i]; a[i]=a[j]; a[j]=t;
+    }
+    const k=Math.floor(Number(n)); return a.slice(0,Number.isFinite(k)&&k>0?k:1);
+  }
+  /** A complete level config, indistinguishable from a LEVELS row to everything downstream. */
+  function cfg(levels,t,rnd){
+    t=norm(t); const sh=SHAPE[t];
+    let conf=0;
+    if(sh.conf) for(const L of (levels||[]))
+      if(L&&L.type===t&&Number.isFinite(L.conf)&&L.conf>conf)conf=L.conf;
+    return {id:ID, ch:-1, name:LABEL+' · '+KIND[t], type:t, bubbles:sh.bubbles, correct:1,
+      rounds:ROUNDS, pool:sample(pool(levels,t),sh.bubbles+EXTRA,rnd), conf, review:true};
+  }
+  /** True only when every shipped level has been 3-starred: there is nothing left to unlock. */
+  function complete(levels,stars){
+    const s=stars||{}, L=levels||[];
+    if(!L.length)return false;
+    return L.every(x=>x&&((s[x.id]||0)>=3));
+  }
+  /** Where 开始 should drop in: the first unlocked level not yet mastered, else the review. */
+  function nextId(levels,isUnlocked,stars){
+    const s=stars||{}, L=levels||[];
+    for(const x of L){
+      if(!x)continue;
+      if(typeof isUnlocked==='function'&&!isUnlocked(x.id))continue;
+      if((s[x.id]||0)<3)return x.id;
+    }
+    return ID;
+  }
+  return {ID,LABEL,TYPES,KIND,ROUNDS,type,pool,sample,cfg,complete,nextId};
+})();
+/* ==== REVIEW END ==== */
 /* ============ LEVEL MAP ============ */
 function unlocked(id){ return id===1 || (Store.stars[id-1]||0)>=1; }
-function continueId(){ for(const L of LEVELS){ if(unlocked(L.id)&&(Store.stars[L.id]||0)<3)return L.id; } return 12; }
+function continueId(){ return Review.nextId(LEVELS,unlocked,Store.stars); }
 function renderMap(){
   let total=0; LEVELS.forEach(L=>total+=(Store.stars[L.id]||0)); $('#totalStars').textContent='⭐ '+total+'/36';
   $('#totalWords').textContent='📖 '+Store.knownCount()+' 个';
   $('#totalBest').textContent='🏆 '+Store.bestTotal();
   const wrap=$('#mapWrap'); wrap.innerHTML=''; const cur=continueId();
+  // The 总复习 footer only appears once there is genuinely nothing left to unlock. renderMap()
+  // runs on boot and after every clear, so the button appears the moment the 36th star lands.
+  $('#mapFoot').hidden=!Review.complete(LEVELS,Store.stars);
   CHAPTERS.forEach((ch,ci)=>{
     const row=document.createElement('div'); row.className='mapRow';
     const banner=document.createElement('div'); banner.className='chBanner'; banner.style.background=ch.color;
@@ -1360,13 +1480,25 @@ const Score=(()=>{
 /* ============ GAME ENGINE ============ */
 let G=null; // game state
 function startLevel(id){
-  const cfg=LEVELS.find(L=>L.id===id);
+  const rev=id===Review.ID;
+  // A review has no row in LEVELS, so it is built from the tables instead of looked up. The
+  // `!cfg` guard covers a hand-edited id: falling back to the map beats a null dereference.
+  const cfg=rev?Review.cfg(LEVELS,Review.type()):LEVELS.find(L=>L.id===id);
+  if(!cfg){ show('scr-levels'); renderMap(); return; }
   G={cfg,round:0,found:0,need:cfg.correct,mistakes:0,streak:0,maxStreak:0,start:Date.now(),
     bubbles:[],raf:0,sid:(G?G.sid+1:1),lock:true,prev:null,rt:null,W:0,H:0};
   Learned.reset();   // the clear card reports on the level just played, never on the previous one
   Score.reset();     // ...and so must the 得分 chip, or it would carry the last level's total
   show('scr-game');
-  $('#lvlNo').textContent=id; $('#lvlName').textContent=' · '+cfg.name;
+  $('#lvlNo').textContent=id;
+  // The kind (" · 字") is its own node so the narrow-phone rule can drop it: a review chip
+  // showing 总复习 · 字 measures 102px against a numbered level's 53px, which wraps #hud to two
+  // rows at 320px and costs 17px of play area on the shortest phone this game ships for.
+  $('#lvlName').textContent=rev?Review.LABEL:' · '+cfg.name;
+  $('#lvlKind').textContent=rev?' · '+Review.KIND[cfg.type]:'';
+  // 第13关 would be a lie for a board assembled from every level, so the numeric prefix goes
+  // and the name carries the chip (see .lvlChip.review).
+  $('#lvlChip').classList.toggle('review',rev);
   $('#missChip').classList.remove('show'); $('#missN').textContent='0';
   paintScore(0,false);
   $('#clearOverlay').classList.remove('show');
@@ -1596,8 +1728,10 @@ function levelClear(){
   const record=Store.setBest(G.cfg.id,Score.value);
   const ov=$('#clearOverlay');
   const last=G.cfg.id===LEVELS.length;
-  $('#cTitle').textContent=last?'全部通关！🎉':'过关啦！';
-  $('#cSub').textContent=last?'你是国学小状元！':pick(['你是识字小明星','继续加油哦','太了不起啦']);
+  const rev=G.cfg.id===Review.ID;
+  $('#cTitle').textContent=rev?'复习完成！🎯':last?'全部通关！🎉':'过关啦！';
+  $('#cSub').textContent=rev?pick(['都记得真牢','再来一组？','越来越熟练啦'])
+    :last?'你是国学小状元！':pick(['你是识字小明星','继续加油哦','太了不起啦']);
   const cs=$('#cStars'); cs.innerHTML='';
   for(let i=0;i<3;i++){ const s=document.createElement('span'); s.className='cStar'; s.textContent='★';
     if(i<stars){ s.classList.add('on'); s.style.animationDelay=(0.3+i*0.35)+'s'; } cs.appendChild(s); }
@@ -1606,7 +1740,10 @@ function levelClear(){
     : '得分 <b>'+Score.value+'</b> · 最高 '+Store.bestOf(G.cfg.id);
   $('#cStats').textContent='用时 '+secs+' 秒 · 失误 '+G.mistakes+' 次 · 最高连对 '+G.maxStreak;
   renderLearned();
-  $('#btnNext').style.display=last?'none':'flex';
+  // 下一关 is meaningless after a review — there is no level 14 — so the two exit buttons
+  // (🔁 再玩一次, 🗺️ 选关卡) are the whole menu. The review's own 🏆 record still banks, so
+  // beating a previous review is announced exactly like a level's.
+  $('#btnNext').style.display=(last||rev)?'none':'flex';
   ov.classList.add('show');
   SFX.fanfare();
   setTimeout(()=>{ Confetti.burst(innerWidth*0.3,innerHeight*0.4,40,8); Confetti.burst(innerWidth*0.7,innerHeight*0.4,40,8); },150);
@@ -1688,7 +1825,11 @@ function step(dt){
 function render(){ for(const b of G.bubbles){ if(b.dead)continue; b.el.style.transform='translate3d('+(b.x-b.r)+'px,'+(b.y-b.r)+'px,0)'; b.el.style.setProperty('--pos','translate3d('+(b.x-b.r)+'px,'+(b.y-b.r)+'px,0)'); } }
 
 /* ============ NAV ============ */
-$('#btnStart').onclick=()=>{ SFX.ensure(); SFX.click(); Voice.prime(); Voice.speak('开始啦'); startLevel(continueId()); };
+/* 开始 used to hard-drop into level 12 once everything was 3-starred, so the button stopped
+   promising anything. It now speaks what it is about to do — a new level, or a review. */
+$('#btnStart').onclick=()=>{ SFX.ensure(); SFX.click(); Voice.prime();
+  const nid=continueId(); Voice.speak(nid===Review.ID?'复习开始啦':'开始啦'); startLevel(nid); };
+$('#btnReview').onclick=()=>{ SFX.click(); Voice.prime(); Voice.speak('复习开始啦'); startLevel(Review.ID); };
 $('#btnLevels').onclick=()=>{ SFX.click(); leaveGame(); };
 $('#btnBackMap').onclick=()=>{ SFX.click(); Voice.stop(); show('scr-start'); };
 
