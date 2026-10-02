@@ -270,9 +270,11 @@ function loadBoardTap(setup) {
     // this offset is what proves the handler converts.
     $: () => ({ getBoundingClientRect: () => ({ left: 40, top: 90 }) }),
     // Faithful to the page's own first line, so a tap the page would swallow does not read as
-    // a tap here: a locked round and a burst bubble are both real, both reachable.
+    // a tap here. `G.lock` is deliberately NOT in this stub's guard: tapBubble no longer bails
+    // on a locked round, it just declines to *score* one (tests/tap.test.js). The dead-bubble
+    // case is the one refusal that is still absolute.
     tapBubble: (b, cx, cy) => {
-      if (!ctx.G || ctx.G.lock || !b || b.dead) return;
+      if (!ctx.G || !b || b.dead) return;
       calls.push({ b, cx, cy });
     },
     globalThis: undefined,
@@ -377,7 +379,13 @@ test('the module is declared before the handler that runs it', () => {
   const src = page();
   assert.ok(src.indexOf('/* ==== HIT START ==== */') < src.indexOf('function boardTap(e){'), 'Hit is used above its declaration');
   assert.ok(src.includes("$('#playArea').addEventListener('pointerup',boardTap);"), 'boardTap is not the registered handler');
-  assert.ok(page().includes('if(G.lock||b.dead)return;'), 'the tap guards were removed');
+  assert.ok(page().includes('if(b.dead)return;'), 'the dead-bubble guard was removed');
+  // ...and the lock must no longer be one of the reasons a tap is dropped before it is heard.
+  // Checked against the comment-stripped source: tapBubble's new note quotes the old guard
+  // verbatim so the reasoning stays next to the code, which a bare includes() would trip on.
+  const live = stripComments(page());
+  assert.ok(!live.includes('if(G.lock||b.dead)return;'), 'a locked round swallows the tap before the child hears anything');
+  assert.ok(!live.includes('G.lock||b.dead'), 'the lock is still part of a refusal');
 });
 
 test('the forgiveness is invisible — no ring is drawn for a child to aim at', () => {

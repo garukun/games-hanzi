@@ -1919,8 +1919,24 @@ $('#btnHint').onclick=()=>{ if(!G)return; SFX.click(); const rt=G.rt;
    behind it would be a settings screen for a game that is not running. */
 $('#btnSet').onclick=()=>{ if(!G)return; SFX.click(); Help.open(); };
 
+/* Feedback is never gated on the round being live; only *scoring* is. The lock exists in two
+   windows and together they covered almost the whole round: instrumented in Chromium at
+   320x568 on level 1, `G.lock` is true for 658ms after the board spawns (so the instruction can
+   be read out before the board goes live) and then for the 1.7s the win animation runs before
+   nextRound() re-arms it — a single unbroken 2368ms spell measured from the tap that won the
+   round to the tap that could score the next one. An old guard (`if(G.lock||b.dead)return;`)
+   sat above everything, so for that whole window the board was on screen, drifting and
+   colliding, and a child tapping at it got *nothing*: measured, 13 taps across the 1.6s win
+   pause produced 0 utterances and 0 sound effects, and a tap inside the spawn window was
+   equally silent. For an eager tapper that is roughly 70% of a round spent tapping a screen
+   that looks live and is not — the same class of dead-end as iteration 15's missed tap, and
+   just as bad: silence teaches a child the game is broken.
+   What a locked tap still gets: the tap sound, the bounce, the word read aloud and the smile.
+   What it must not get: scoring. In the spawn window that would let a child answer before
+   hearing the question — on a phrase level that is the whole game — and in the win window it
+   would charge a 💧 for tapping while the round they just finished is still on screen. */
 function tapBubble(b,clientX,clientY){
-  if(G.lock||b.dead)return;
+  if(b.dead)return;
   // The tap kick is scaled by the pace tier too, so a tapped bubble bounces by the same
   // *proportion* of its drift whether the board is drifting slowly or quickly.
   const kick=Pace.mul(Store.pace);
@@ -1929,6 +1945,7 @@ function tapBubble(b,clientX,clientY){
   // gemini.html set a smileTimer on the tapped bubble; do the same with a class
   // so a wrong tap still gets the friendly "it's ok" reaction.
   smile(b);
+  if(G.lock)return;   // heard, but not judged: see the note above
   if(b.isTarget&&!b.found){
     b.found=true; b.dead=true; G.found++; G.streak++; G.maxStreak=Math.max(G.maxStreak,G.streak);
     // gemini.html ticked a live `⭐ n` in the header on every correct tap and paid a bonus
