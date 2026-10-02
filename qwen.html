@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#aee1ff">
+<title>泡泡国学堂 · 听音找字</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/zcool-kuaile@latest/index.css">
+<style>
+:root{
+  --ink:#2b3a55; --ink2:#5a6b88; --paper:#fffdf6;
+  --coral:#ff6b5e; --amber:#ffb63d; --teal:#29c1b0; --blue:#4d9de0;
+  --pink:#f27bae; --green:#7cb518; --orange:#ff8f3f; --gold:#ffce3a;
+  --sky1:#9fd9ff; --sky2:#e9f8ff; --hill1:#8fd07e; --hill2:#62b857;
+  --disp:'ZCOOL KuaiLe','Yuanti SC','YouYuan','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;
+  --body:'Yuanti SC','YouYuan','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;height:100%;overflow:hidden;position:fixed;width:100%;}
+body{
+  font-family:var(--body);color:var(--ink);user-select:none;-webkit-user-select:none;
+  touch-action:manipulation;background:linear-gradient(180deg,var(--sky1),var(--sky2) 62%);
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+button{font-family:inherit;border:none;background:none;cursor:pointer;color:inherit;}
+.disp{font-family:var(--disp);}
+
+/* ---------- SCENE ---------- */
+.scene{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;}
+.sun{position:absolute;top:4%;right:6%;width:clamp(70px,12vmin,120px);height:clamp(70px,12vmin,120px);}
+.sun .rays{transform-origin:50% 50%;animation:spin 50s linear infinite;}
+.cloud{position:absolute;background:#fff;border-radius:60px;opacity:.92;filter:drop-shadow(0 6px 10px rgba(70,120,160,.18));}
+.cloud::before,.cloud::after{content:"";position:absolute;background:#fff;border-radius:50%;}
+.cloud::before{width:55%;height:150%;left:12%;top:-55%;}
+.cloud::after{width:42%;height:130%;right:14%;top:-40%;}
+.c1{width:130px;height:38px;top:14%;animation:drift 46s linear infinite;}
+.c2{width:90px;height:28px;top:30%;animation:drift 64s linear infinite;animation-delay:-22s;opacity:.8;}
+.c3{width:160px;height:46px;top:8%;animation:drift 80s linear infinite;animation-delay:-50s;opacity:.7;}
+.bird{position:absolute;top:22%;width:34px;height:14px;animation:fly 30s linear infinite;}
+.bird.b2{top:34%;width:26px;animation-duration:42s;animation-delay:-12s;opacity:.7;}
+.hills{position:absolute;left:0;right:0;bottom:0;width:100%;height:34vh;min-height:120px;}
+.tw{position:absolute;width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 8px #fff;animation:tw 3s ease-in-out infinite;}
+
+/* ---------- APP / SCREENS ---------- */
+#app{position:relative;z-index:2;height:100dvh;width:100%;}
+.screen{position:absolute;inset:0;display:none;flex-direction:column;}
+.screen.active{display:flex;animation:fadeIn .4s ease;}
+
+/* ---------- START ---------- */
+#scr-start{padding:14px clamp(12px,4vw,40px) 8px;}
+.cornerSet{position:absolute;top:10px;right:14px;display:flex;gap:8px;z-index:5;}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--paper);border:3px solid var(--ink);
+  border-radius:999px;padding:6px 12px;font-size:13px;font-weight:700;box-shadow:0 4px 0 rgba(43,58,85,.18);}
+.chip.off{opacity:.45;filter:grayscale(.6);}
+.chip .ic{font-size:16px;}
+.startWrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(10px,2.4vh,22px);position:relative;z-index:3;}
+.mascotCol{display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;}
+.mascotBadge{width:clamp(120px,22vmin,180px);height:clamp(120px,22vmin,180px);border-radius:50%;overflow:hidden;
+  border:4px solid var(--ink);box-shadow:0 8px 0 rgba(43,58,85,.18),0 14px 26px rgba(43,58,85,.25);background:#d8f3e5;
+  animation:wob 4.5s ease-in-out infinite;position:relative;}
+.mascotBadge img{width:100%;height:100%;object-fit:cover;display:block;}
+.mascotBadge .fb{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:64px;}
+.speechBub{background:var(--paper);border:3px solid var(--ink);border-radius:18px;padding:6px 14px;font-weight:700;font-size:14px;
+  box-shadow:0 4px 0 rgba(43,58,85,.18);position:relative;animation:wob2 3.6s ease-in-out infinite;}
+.speechBub::before{content:"";position:absolute;top:-9px;left:50%;transform:translateX(-50%);border:8px solid transparent;border-bottom-color:var(--ink);}
+.speechBub::after{content:"";position:absolute;top:-5px;left:50%;transform:translateX(-50%);border:6px solid transparent;border-bottom-color:var(--paper);}
+.titleCol{text-align:center;}
+.logo{font-family:var(--disp);font-size:clamp(40px,9.5vw,78px);line-height:1;display:flex;gap:.04em;justify-content:center;flex-wrap:wrap;
+  filter:drop-shadow(0 4px 0 rgba(43,58,85,.22));}
+.logo span{display:inline-block;animation:tile 2.6s ease-in-out infinite;}
+.subtitle{margin-top:8px;display:inline-block;background:var(--paper);border:3px solid var(--ink);border-radius:999px;
+  padding:5px 16px;font-weight:700;font-size:clamp(12px,2.6vw,16px);box-shadow:0 4px 0 rgba(43,58,85,.18);}
+.btnCol{display:flex;flex-direction:column;gap:12px;width:min(320px,82vw);}
+.btn3d{font-family:var(--disp);font-size:clamp(18px,4.4vw,24px);color:#fff;border:3px solid var(--ink);border-radius:999px;
+  padding:12px 18px;box-shadow:0 6px 0 var(--cd,#000),0 12px 20px rgba(43,58,85,.22);transition:transform .08s,box-shadow .08s;
+  display:flex;align-items:center;justify-content:center;gap:10px;letter-spacing:1px;}
+.btn3d:active{transform:translateY(4px);box-shadow:0 2px 0 var(--cd,#000),0 6px 12px rgba(43,58,85,.22);}
+.btn3d.coral{background:var(--coral);--cd:#d8463a;}
+.btn3d.teal{background:var(--teal);--cd:#1c9385;}
+.btn3d.amber{background:var(--amber);--cd:#d8931f;}
+.btn3d.blue{background:var(--blue);--cd:#2f7cb8;}
+.btn3d.small{font-size:16px;padding:9px 16px;}
+.stepStrip{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;padding:6px 0 4px;z-index:3;}
+.step{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.85);border:3px solid var(--ink);border-radius:999px;
+  padding:5px 12px;font-weight:700;font-size:13px;box-shadow:0 3px 0 rgba(43,58,85,.16);}
+.step .e{font-size:18px;}
+.arr{font-size:18px;color:var(--ink2);font-weight:900;}
+.deco{position:absolute;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--disp);
+  opacity:.85;box-shadow:inset 0 -5px 10px rgba(0,0,0,.14),0 6px 14px rgba(43,58,85,.2);border:3px solid rgba(255,255,255,.7);
+  pointer-events:none;z-index:1;animation:deco 9s ease-in-out infinite alternate;}
+
+/* ---------- LEVELS ---------- */
+#scr-levels{padding:10px clamp(10px,3vw,28px) 8px;}
+.mapHead{display:flex;align-items:center;gap:10px;padding:2px 4px 8px;}
+.iconBtn{width:46px;height:46px;border-radius:14px;background:var(--paper);border:3px solid var(--ink);font-size:20px;
+  box-shadow:0 4px 0 rgba(43,58,85,.18);display:flex;align-items:center;justify-content:center;}
+.iconBtn:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(43,58,85,.18);}
+.mapHead h2{font-family:var(--disp);font-size:clamp(20px,5vw,30px);margin:0;flex:1;}
+.mapWrap{flex:1;display:flex;flex-direction:column;justify-content:space-around;gap:4px;overflow:hidden;}
+.mapRow{position:relative;}
+.chBanner{display:inline-flex;align-items:center;gap:6px;color:#fff;font-family:var(--disp);font-size:clamp(13px,3vw,17px);
+  border:3px solid var(--ink);border-radius:999px;padding:3px 14px;box-shadow:0 3px 0 rgba(43,58,85,.2);margin:0 0 2px 6px;}
+.rowInner{position:relative;padding:4px 7% 2px;}
+.rowPath{position:absolute;inset:0;width:100%;height:100%;}
+.nodes{position:relative;display:flex;justify-content:space-between;align-items:flex-start;}
+.nodeWrap{display:flex;flex-direction:column;align-items:center;gap:3px;width:23%;}
+.node{width:clamp(48px,12vmin,68px);height:clamp(48px,12vmin,68px);border-radius:50%;border:3px solid var(--ink);
+  font-family:var(--disp);font-size:clamp(20px,5vmin,28px);color:#fff;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 5px 0 rgba(43,58,85,.25),0 8px 14px rgba(43,58,85,.2);position:relative;transition:transform .1s;}
+.node:active{transform:translateY(3px);}
+.node.locked{background:#cdd5e4!important;color:#8b94a7;box-shadow:0 5px 0 rgba(43,58,85,.18);}
+.node.locked .lk{position:absolute;font-size:18px;}
+.node.current{animation:nodePulse 1.6s ease-in-out infinite;}
+.node .nm{position:relative;z-index:1;}
+.stars{display:flex;gap:2px;}
+.stars i{font-size:clamp(11px,2.6vmin,15px);color:#cdd5e4;line-height:1;}
+.stars i.on{color:var(--gold);text-shadow:0 1px 0 #d8931f;}
+.rowLink{text-align:center;color:var(--ink2);font-size:18px;animation:bobd 1.6s ease-in-out infinite;}
+
+/* ---------- GAME ---------- */
+#scr-game{padding:8px clamp(8px,2.4vw,20px) 8px;}
+.gameCol{flex:1;display:flex;flex-direction:column;gap:8px;min-height:0;}
+#hud{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+.lvlChip{background:var(--paper);border:3px solid var(--ink);border-radius:14px;padding:5px 12px;font-family:var(--disp);
+  font-size:clamp(13px,3vw,17px);box-shadow:0 4px 0 rgba(43,58,85,.18);white-space:nowrap;}
+.dots{display:flex;gap:5px;align-items:center;flex:1;justify-content:center;flex-wrap:wrap;}
+.dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--ink);background:#fff;}
+.dot.done{background:var(--gold);}
+.dot.cur{animation:dotPulse 1s ease-in-out infinite;}
+.missChip{background:var(--paper);border:3px solid var(--ink);border-radius:14px;padding:4px 10px;font-weight:700;font-size:13px;
+  box-shadow:0 3px 0 rgba(43,58,85,.18);display:none;}
+.missChip.show{display:inline-flex;gap:4px;align-items:center;}
+#promptCard{display:flex;align-items:center;gap:12px;background:var(--paper);border:3px solid var(--ink);border-radius:22px;
+  padding:8px 12px;box-shadow:0 6px 0 rgba(43,58,85,.18);transition:background .3s;}
+#promptCard.reveal{background:#fff6d8;animation:revPop .4s ease;}
+.speakBtn{width:clamp(48px,11vmin,60px);height:clamp(48px,11vmin,60px);border-radius:50%;background:var(--coral);border:3px solid var(--ink);
+  font-size:clamp(22px,5vmin,28px);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 0 #d8463a;position:relative;flex:0 0 auto;}
+.speakBtn:active{transform:translateY(3px);box-shadow:0 1px 0 #d8463a;}
+.speakBtn.speaking::before,.speakBtn.speaking::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:3px solid var(--coral);animation:ring 1s ease-out infinite;}
+.speakBtn.speaking::after{animation-delay:.5s;}
+.pMid{flex:1;text-align:center;min-width:0;}
+.pBig{font-family:var(--disp);font-size:clamp(22px,5.4vmin,36px);line-height:1.1;color:var(--ink);}
+.pBig .q{color:var(--coral);}
+.pBig .ra{color:var(--ink2);}
+.pBig .ar{color:var(--coral);margin:0 .15em;}
+.pBig .rb{color:var(--teal);}
+.pSub{font-size:clamp(11px,2.6vmin,15px);color:var(--ink2);font-weight:700;margin-top:2px;}
+.pSub .py{font-style:normal;letter-spacing:.5px;}
+.hintBtn{width:clamp(42px,9.5vmin,52px);height:clamp(42px,9.5vmin,52px);border-radius:50%;background:var(--amber);border:3px solid var(--ink);
+  font-size:clamp(20px,4.6vmin,26px);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 0 #d8931f;flex:0 0 auto;}
+.hintBtn:active{transform:translateY(3px);box-shadow:0 1px 0 #d8931f;}
+#playArea{flex:1;position:relative;border-radius:24px;overflow:hidden;touch-action:none;
+  background:radial-gradient(120% 80% at 50% 0%,rgba(255,255,255,.35),rgba(255,255,255,0) 60%);}
+#comboChip{position:absolute;top:8px;right:10px;background:var(--pink);color:#fff;font-family:var(--disp);border:3px solid var(--ink);
+  border-radius:999px;padding:4px 12px;font-size:15px;box-shadow:0 4px 0 #c85389;opacity:0;transform:scale(.4);pointer-events:none;z-index:6;}
+#comboChip.show{animation:comboPop .4s cubic-bezier(.34,1.56,.64,1) forwards;}
+
+.bubble{position:absolute;left:0;top:0;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;
+  font-family:var(--disp);background:radial-gradient(circle at 32% 27%,rgba(255,255,255,.6),rgba(255,255,255,0) 44%),var(--c);
+  box-shadow:inset 0 -6px 12px rgba(0,0,0,.16),0 8px 16px rgba(43,58,85,.24);border:3px solid rgba(255,255,255,.8);
+  touch-action:manipulation;cursor:pointer;will-change:transform;}
+.btxt{line-height:1;white-space:nowrap;text-shadow:0 2px 0 rgba(0,0,0,.2);animation:bob 3.4s ease-in-out infinite alternate;animation-delay:var(--d,0s);}
+.bubble.spawn{animation:spawnIn .5s cubic-bezier(.34,1.56,.64,1) backwards;animation-delay:var(--sd,0s);}
+.bubble.shake{animation:shk .45s;}
+.bubble.burst{animation:burst .55s ease-out forwards;pointer-events:none;}
+.bubble.burst::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:4px solid rgba(255,255,255,.85);animation:ringOut .5s ease-out;}
+.bubble.shrink{animation:shrink .3s ease-in forwards;pointer-events:none;}
+
+/* ---------- CLEAR ---------- */
+#clearOverlay{position:absolute;inset:0;z-index:20;display:none;align-items:center;justify-content:center;
+  background:rgba(43,58,85,.45);backdrop-filter:blur(2px);padding:16px;}
+#clearOverlay.show{display:flex;animation:fadeIn .3s ease;}
+.clearCard{background:var(--paper);border:4px solid var(--ink);border-radius:30px;padding:18px 22px 22px;text-align:center;
+  width:min(420px,92vw);box-shadow:0 12px 0 rgba(43,58,85,.2),0 24px 40px rgba(0,0,0,.3);animation:cardIn .5s cubic-bezier(.34,1.56,.64,1);}
+.cMascot{width:120px;height:120px;border-radius:50%;overflow:hidden;margin:0 auto;border:4px solid var(--ink);background:#fff3d6;position:relative;}
+.cMascot img{width:100%;height:100%;object-fit:cover;}
+.cMascot .fb{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:56px;}
+.cTitle{font-family:var(--disp);font-size:clamp(28px,7vw,42px);margin:8px 0 2px;color:var(--coral);
+  -webkit-text-stroke:1px rgba(43,58,85,.15);}
+.cSub{font-weight:700;color:var(--ink2);font-size:14px;}
+.cStars{display:flex;justify-content:center;gap:8px;margin:10px 0;}
+.cStar{font-size:46px;color:#dfe4ee;line-height:1;transform:scale(0);}
+.cStar.on{color:var(--gold);text-shadow:0 3px 0 #d8931f;animation:starPop .5s cubic-bezier(.34,1.56,.64,1) forwards;}
+.cStats{font-weight:700;color:var(--ink2);font-size:13px;margin-bottom:14px;}
+.cBtns{display:flex;flex-direction:column;gap:10px;}
+
+/* ---------- MODAL ---------- */
+#modalHelp{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:rgba(43,58,85,.5);padding:16px;}
+#modalHelp.show{display:flex;}
+.helpCard{background:var(--paper);border:4px solid var(--ink);border-radius:26px;padding:18px 20px;width:min(400px,92vw);
+  box-shadow:0 12px 0 rgba(43,58,85,.2);animation:cardIn .4s cubic-bezier(.34,1.56,.64,1);}
+.helpCard h3{font-family:var(--disp);font-size:26px;margin:0 0 12px;text-align:center;color:var(--teal);}
+.helpRow{display:flex;align-items:center;gap:12px;margin:10px 0;}
+.helpRow .he{font-size:34px;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  border:3px solid var(--ink);flex:0 0 auto;}
+.helpRow p{margin:0;font-weight:700;font-size:14px;line-height:1.4;}
+.helpNote{background:#fff6d8;border:2px dashed var(--amber);border-radius:14px;padding:8px 12px;font-size:12px;font-weight:700;color:#a06a10;margin:12px 0;}
+
+/* ---------- TOAST / CONFETTI ---------- */
+#toastLayer{position:fixed;inset:0;z-index:30;pointer-events:none;}
+.toast{position:absolute;transform:translate(-50%,-50%);font-family:var(--disp);font-size:clamp(22px,6vw,34px);
+  white-space:nowrap;text-shadow:0 3px 0 rgba(43,58,85,.25);animation:toastUp 1s ease-out forwards;}
+.toast.good{color:#3fbf6b;}
+.toast.bad{color:var(--orange);}
+#confetti{position:fixed;inset:0;z-index:35;pointer-events:none;}
+
+/* ---------- ANIMATIONS ---------- */
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes drift{from{transform:translateX(-30vw)}to{transform:translateX(130vw)}}
+@keyframes fly{0%{transform:translateX(-10vw)}100%{transform:translateX(110vw)}}
+@keyframes tw{0%,100%{opacity:.2;transform:scale(.6)}50%{opacity:1;transform:scale(1.2)}}
+@keyframes wob{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+@keyframes wob2{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-4px) rotate(1deg)}}
+@keyframes tile{0%,100%{transform:translateY(0) rotate(var(--rot,0deg))}50%{transform:translateY(-12%) rotate(calc(var(--rot,0deg)*-1))}}
+@keyframes deco{from{transform:translateY(0) rotate(-6deg)}to{transform:translateY(-26px) rotate(6deg)}}
+@keyframes bob{from{transform:translateY(-3%) rotate(-2deg)}to{transform:translateY(3%) rotate(2deg)}}
+@keyframes bobd{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
+@keyframes spawnIn{from{transform:var(--pos) scale(0)}to{transform:var(--pos) scale(1)}}
+@keyframes shk{0%,100%{transform:var(--pos)}20%{transform:var(--pos) translateX(-7px) rotate(-4deg)}40%{transform:var(--pos) translateX(7px) rotate(4deg)}60%{transform:var(--pos) translateX(-5px) rotate(-3deg)}80%{transform:var(--pos) translateX(5px) rotate(3deg)}}
+@keyframes burst{0%{transform:var(--pos) scale(1);opacity:1}40%{transform:var(--pos) scale(1.25);opacity:1}100%{transform:var(--pos) scale(1.95);opacity:0}}
+@keyframes ringOut{from{opacity:.9;transform:scale(.7)}to{opacity:0;transform:scale(1.7)}}
+@keyframes shrink{to{transform:var(--pos) scale(0);opacity:0}}
+@keyframes ring{0%{transform:scale(.8);opacity:.9}100%{transform:scale(1.7);opacity:0}}
+@keyframes dotPulse{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(255,107,94,.6)}50%{transform:scale(1.25);box-shadow:0 0 0 5px rgba(255,107,94,0)}}
+@keyframes nodePulse{0%,100%{box-shadow:0 5px 0 rgba(43,58,85,.25),0 0 0 0 rgba(255,107,94,.6)}50%{box-shadow:0 5px 0 rgba(43,58,85,.25),0 0 0 8px rgba(255,107,94,0)}}
+@keyframes comboPop{0%{opacity:0;transform:scale(.4)}60%{opacity:1;transform:scale(1.15)}100%{opacity:1;transform:scale(1)}}
+@keyframes toastUp{0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}25%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}40%{transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-130%) scale(1)}}
+@keyframes starPop{0%{transform:scale(0) rotate(-40deg)}70%{transform:scale(1.3) rotate(10deg)}100%{transform:scale(1) rotate(0)}}
+@keyframes cardIn{from{transform:scale(.7) translateY(20px);opacity:0}to{transform:scale(1) translateY(0);opacity:1}}
+@keyframes revPop{0%{transform:scale(.96)}50%{transform:scale(1.03)}100%{transform:scale(1)}}
+
+/* ---------- RESPONSIVE ---------- */
+@media (orientation:landscape) and (min-width:760px){
+  .startWrap{flex-direction:row;gap:clamp(20px,4vw,60px);}
+  .titleCol{order:2;flex:1;}
+  .mascotCol{order:1;}
+  .btnCol{order:3;width:min(280px,30vw);}
+}
+@media (max-height:560px){
+  .mascotBadge{width:96px;height:96px;}
+  .speechBub{display:none;}
+  .logo{font-size:clamp(30px,7vh,52px);}
+  .btn3d{padding:8px 14px;font-size:16px;}
+  .stepStrip{display:none;}
+  .deco{display:none;}
+  #promptCard{padding:5px 10px;gap:8px;}
+  .pBig{font-size:clamp(18px,4vmin,26px);}
+}
+</style>
+</head>
+<body>
+
+<!-- SCENE -->
+<div class="scene" aria-hidden="true">
+  <svg class="sun" viewBox="0 0 100 100">
+    <g class="rays" stroke="#ffd65c" stroke-width="5" stroke-linecap="round">
+      <line x1="50" y1="4" x2="50" y2="16"/><line x1="50" y1="84" x2="50" y2="96"/>
+      <line x1="4" y1="50" x2="16" y2="50"/><line x1="84" y1="50" x2="96" y2="50"/>
+      <line x1="17" y1="17" x2="26" y2="26"/><line x1="74" y1="74" x2="83" y2="83"/>
+      <line x1="83" y1="17" x2="74" y2="26"/><line x1="26" y1="74" x2="17" y2="83"/>
+    </g>
+    <circle cx="50" cy="50" r="24" fill="#ffd65c"/>
+    <circle cx="50" cy="50" r="24" fill="none" stroke="#ffb63d" stroke-width="3"/>
+  </svg>
+  <div class="cloud c1"></div><div class="cloud c2"></div><div class="cloud c3"></div>
+  <svg class="bird" viewBox="0 0 40 14"><path d="M2 10 Q10 1 18 9 Q26 1 38 9" fill="none" stroke="#3a4a66" stroke-width="2.4" stroke-linecap="round"/></svg>
+  <svg class="bird b2" viewBox="0 0 40 14"><path d="M2 10 Q10 1 18 9 Q26 1 38 9" fill="none" stroke="#3a4a66" stroke-width="2.4" stroke-linecap="round"/></svg>
+  <svg class="hills" viewBox="0 0 1440 320" preserveAspectRatio="none">
+    <path fill="#8fd07e" d="M0,150 C240,70 420,210 720,140 C1020,70 1200,200 1440,130 L1440,320 0,320 Z"/>
+    <g fill="#5aa84f"><circle cx="180" cy="150" r="14"/><circle cx="166" cy="158" r="12"/><circle cx="194" cy="158" r="12"/><rect x="177" y="160" width="6" height="20" fill="#8a5a2b"/></g>
+    <g fill="#5aa84f"><circle cx="1180" cy="140" r="16"/><circle cx="1164" cy="150" r="13"/><circle cx="1196" cy="150" r="13"/><rect x="1177" y="150" width="6" height="22" fill="#8a5a2b"/></g>
+    <g><circle cx="520" cy="200" r="6" fill="#ff6b5e"/><circle cx="520" cy="200" r="2.5" fill="#fff"/><circle cx="700" cy="235" r="6" fill="#ffb63d"/><circle cx="700" cy="235" r="2.5" fill="#fff"/><circle cx="980" cy="210" r="6" fill="#f27bae"/><circle cx="980" cy="210" r="2.5" fill="#fff"/></g>
+    <path fill="#62b857" d="M0,210 C260,140 520,250 820,195 C1120,140 1280,240 1440,200 L1440,320 0,320 Z"/>
+  </svg>
+  <div class="tw" style="top:18%;left:30%"></div><div class="tw" style="top:42%;left:70%;animation-delay:1s"></div>
+  <div class="tw" style="top:26%;left:50%;animation-delay:2s"></div><div class="tw" style="top:55%;left:18%;animation-delay:1.5s"></div>
+</div>
+
+<div id="app">
+
+  <!-- START -->
+  <section id="scr-start" class="screen active">
+    <div class="cornerSet">
+      <button class="chip" id="tglSfx"><span class="ic">🔊</span><span>音效</span></button>
+      <button class="chip" id="tglVoice"><span class="ic">🗣️</span><span>语音</span></button>
+      <button class="chip" id="btnHelp"><span class="ic">❓</span></button>
+    </div>
+    <div class="startWrap">
+      <div class="mascotCol">
+        <div class="mascotBadge"><span class="fb">🐼</span><img id="mImg1" alt="熊猫老师"></div>
+        <div class="speechBub">跟我一起认字吧！</div>
+      </div>
+      <div class="titleCol">
+        <h1 class="logo" id="logo"></h1>
+        <div class="subtitle">听声音 · 找汉字 · 三字经 弟子规</div>
+      </div>
+      <div class="btnCol">
+        <button class="btn3d coral" id="btnStart">▶ 开始冒险</button>
+        <button class="btn3d teal" id="btnLevels">🗺️ 选择关卡</button>
+      </div>
+    </div>
+    <div class="stepStrip">
+      <span class="step"><span class="e">🔊</span>听一听</span><span class="arr">➜</span>
+      <span class="step"><span class="e">👀</span>找一找</span><span class="arr">➜</span>
+      <span class="step"><span class="e">👆</span>点一点</span>
+    </div>
+    <div class="deco" style="top:18%;left:8%;width:54px;height:54px;font-size:26px;background:var(--teal);--d:0s">人</div>
+    <div class="deco" style="top:62%;left:6%;width:46px;height:46px;font-size:22px;background:var(--amber);animation-delay:1.2s">之</div>
+    <div class="deco" style="top:30%;right:9%;width:50px;height:50px;font-size:24px;background:var(--pink);animation-delay:.6s">学</div>
+    <div class="deco" style="top:70%;right:7%;width:44px;height:44px;font-size:20px;background:var(--blue);animation-delay:1.8s">善</div>
+    <div class="deco" style="top:46%;left:14%;width:40px;height:40px;font-size:18px;background:var(--green);animation-delay:2.4s">习</div>
+  </section>
+
+  <!-- LEVELS -->
+  <section id="scr-levels" class="screen">
+    <div class="mapHead">
+      <button class="iconBtn" id="btnBackMap">🏠</button>
+      <h2>选择关卡</h2>
+      <span class="chip" id="totalStars">⭐ 0/36</span>
+    </div>
+    <div class="mapWrap" id="mapWrap"></div>
+  </section>
+
+  <!-- GAME -->
+  <section id="scr-game" class="screen">
+    <div class="gameCol">
+      <header id="hud">
+        <button class="iconBtn" id="btnHome">🏠</button>
+        <span class="lvlChip" id="lvlChip">第1关</span>
+        <div class="dots" id="dotsWrap"></div>
+        <span class="missChip" id="missChip">💧<span id="missN">0</span></span>
+        <button class="iconBtn" id="btnMute">🔊</button>
+      </header>
+      <div id="promptCard">
+        <button class="speakBtn" id="btnSpeak">🔊</button>
+        <div class="pMid"><div class="pBig" id="pBig">听一听，找一找</div><div class="pSub" id="pSub">找到读这个音的泡泡</div></div>
+        <button class="hintBtn" id="btnHint">💡</button>
+      </div>
+      <div id="playArea">
+        <div id="comboChip"></div>
+      </div>
+    </div>
+    <div id="clearOverlay">
+      <div class="clearCard">
+        <div class="cMascot"><span class="fb">🎉</span><img id="mImg2" alt="庆祝"></div>
+        <div class="cTitle" id="cTitle">过关啦！</div>
+        <div class="cSub" id="cSub">你是识字小明星</div>
+        <div class="cStars" id="cStars"></div>
+        <div class="cStats" id="cStats"></div>
+        <div class="cBtns">
+          <button class="btn3d coral" id="btnNext">下一关 ▶</button>
+          <button class="btn3d teal" id="btnReplay">🔁 再玩一次</button>
+          <button class="btn3d blue small" id="btnMap2">🗺️ 选关卡</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<canvas id="confetti"></canvas>
+<div id="toastLayer"></div>
+
+<!-- HELP MODAL -->
+<div id="modalHelp">
+  <div class="helpCard">
+    <h3>怎么玩？</h3>
+    <div class="helpRow"><span class="he" style="background:var(--coral)">🔊</span><p>点喇叭，<b>听</b>一个汉字或词的声音。</p></div>
+    <div class="helpRow"><span class="he" style="background:var(--teal)">👀</span><p>在飘动的泡泡里<b>找</b>出它，泡泡会轻轻碰撞哦。</p></div>
+    <div class="helpRow"><span class="he" style="background:var(--amber)">👆</span><p>点对了会夸你，点错了也会<b>读</b>给你听，再试试！</p></div>
+    <div class="helpNote"> 给小朋友玩时，请打开设备声音，并允许网页朗读语音。</div>
+    <button class="btn3d teal" id="btnHelpOk" style="width:100%">知道啦！</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const MASCOT1="https://image.qwenlm.ai/public_source/2f0f3c6b-c110-4748-948d-c597fb54d4a5/196327a83-302e-4d9d-92c8-c202ac32e5fa.png";
+const MASCOT2="https://image.qwenlm.ai/public_source/2f0f3c6b-c110-4748-948d-c597fb54d4a5/1b55f7954-9c32-4c14-9037-bc00deff724f.png";
+const PAL=['#ff6b5e','#ffb63d','#29c1b0','#4d9de0','#f27bae','#7cb518','#ff8f3f'];
+
+/* ============ DATA ============ */
+const PY={人:'rén',入:'rù',八:'bā',口:'kǒu',手:'shǒu',日:'rì',月:'yuè',山:'shān',水:'shuǐ',火:'huǒ',
+大:'dà',太:'tài',天:'tiān',夫:'fū',小:'xiǎo',上:'shàng',下:'xià',牛:'niú',马:'mǎ',鸟:'niǎo',乌:'wū',
+木:'mù',本:'běn',禾:'hé',土:'tǔ',士:'shì',王:'wáng',田:'tián',石:'shí',米:'mǐ',云:'yún',雨:'yǔ',风:'fēng',
+花:'huā',草:'cǎo',虫:'chóng',鱼:'yú',目:'mù',白:'bái',千:'qiān',干:'gān',午:'wǔ',兔:'tù',免:'miǎn',
+买:'mǎi',卖:'mài',未:'wèi',末:'mò',由:'yóu',甲:'jiǎ',旧:'jiù',旦:'dàn',休:'xiū',体:'tǐ',贝:'bèi',见:'jiàn',
+毛:'máo',爪:'zhuǎ',瓜:'guā',星:'xīng',光:'guāng',门:'mén',书:'shū',笔:'bǐ',画:'huà',果:'guǒ',羊:'yáng',犬:'quǎn',
+之:'zhī',初:'chū',性:'xìng',善:'shàn',教:'jiào',道:'dào',近:'jìn',远:'yuǎn',习:'xí',子:'zǐ',学:'xué',玉:'yù',
+成:'chéng',器:'qì',知:'zhī',义:'yì',香:'xiāng',融:'róng',让:'ràng',梨:'lí',孝:'xiào',老:'lǎo',幼:'yòu',
+己:'jǐ',已:'yǐ',巳:'sì'};
+const WORDS={太阳:'tài yáng',月亮:'yuè liang',星星:'xīng xing',爸爸:'bà ba',妈妈:'mā ma',哥哥:'gē ge',弟弟:'dì di',
+姐姐:'jiě jie',妹妹:'mèi mei',大山:'dà shān',小河:'xiǎo hé',花朵:'huā duǒ',草地:'cǎo dì',树木:'shù mù',
+小鸟:'xiǎo niǎo',鱼儿:'yú er',白云:'bái yún',下雨:'xià yǔ',上学:'shàng xué',读书:'dú shū',苹果:'píng guǒ',
+西瓜:'xī guā',牛奶:'niú nǎi',面包:'miàn bāo',唱歌:'chàng gē',画画:'huà huà',写字:'xiě zì',老师:'lǎo shī',
+快乐:'kuài lè',勇敢:'yǒng gn',聪明:'cōng ming',礼貌:'lǐ mào',诚实:'chéng shí',勤劳:'qín láo',分享:'fēn xiǎng',
+朋友:'péng you',同学:'tóng xué',校园:'xiào yuán',春天:'chūn tiān',夏天:'xià tiān',秋天:'qiū tiān',冬天:'dōng tiān',
+海洋:'hǎi yáng',森林:'sēn lín',草原:'cǎo yuán',城市:'chéng shì',乡村:'xiāng cūn',音乐:'yīn yuè',美术:'měi shù',
+运动:'yùn dòng',游戏:'yóu xì',故事:'gù shi'};
+const A=s=>Array.from(s);
+const P1=A('人口手日月山水火大小上下天牛马鸟');
+const P2=P1.concat(A('木土田石米云雨风花草虫鱼'));
+const PSJJ=A('之初性本善教道近远习子学玉成器知义香融让梨孝老幼');
+const PBIG=P2.concat(A('星光门书笔画瓜果羊犬'));
+const PCONF=A('人入大太天夫日目田白土士王千干午牛木本禾乌鸟兔免买卖未末由甲旧旦休体贝见手毛爪瓜己已巳');
+const W1=['太阳','月亮','爸爸','妈妈','大山','小河','花朵','小鸟','白云','下雨','上学','读书'];
+const W2=W1.concat(['星星','哥哥','弟弟','姐姐','妹妹','草地','树木','鱼儿','苹果','西瓜','牛奶','面包','唱歌','画画','写字','老师']);
+const W3=['快乐','勇敢','聪明','礼貌','诚实','勤劳','分享','朋友','同学','校园','春天','夏天','秋天','冬天','海洋','森林','草原','城市','乡村','音乐','美术','运动','游戏','故事'];
+const DZG1=[['父母呼','fù mǔ hū','应勿缓','yìng wù huǎn'],['父母命','fù mǔ mìng','行勿懒','xíng wù lǎn'],
+['父母教','fù mǔ jiào','须敬听','xū jìng tīng'],['父母责','fù mǔ zé','须顺承','xū shùn chéng'],
+['冬则温','dōng zé wēn','夏则凊','xià zé qìng'],['晨则省','chén zé xǐng','昏则定','hūn zé dìng'],
+['出必告','chū bì gào','反必面','fǎn bì miàn'],['居有常','jū yǒu cháng','业无变','yè wú biàn']];
+const SZJ1=[['人之初','rén zhī chū','性本善','xìng běn shàn'],['性相近','xìng xiāng jìn','习相远','xí xiāng yuǎn'],
+['苟不教','gǒu bú jiào','性乃迁','xìng nǎi qiān'],['教之道','jiào zhī dào','贵以专','guì yǐ zhuān'],
+['昔孟母','xī mèng mǔ','择邻处','zé lín chǔ'],['子不学','zǐ bù xué','断机杼','duàn jī zhù'],
+['养不教','yǎng bú jiào','父之过','fù zhī guò'],['教不严','jiào bù yán','师之惰','shī zhī duò'],
+['玉不琢','yù bù zhuó','不成器','bù chéng qì'],['香九龄','xiāng jiǔ líng','能温席','néng wēn xí'],
+['融四岁','róng sì suì','能让梨','néng ràng lí'],['首孝悌','shǒu xiào tì','次见闻','cì jiàn wén']];
+const DZG2=[['事虽小','shì suī xiǎo','勿擅为','wù shàn wéi'],['物虽小','wù suī xiǎo','勿私藏','wù sī cáng'],
+['亲所好','qīn suǒ hào','力为具','lì wèi jù'],['亲所恶','qīn suǒ wù','谨为去','jǐn wèi qù'],
+['身有伤','shēn yǒu shāng','贻亲忧','yí qīn yōu'],['德有伤','dé yǒu shāng','贻亲羞','yí qīn xiū'],
+['兄道友','xiōng dào yǒu','弟道恭','dì dào gōng'],['兄弟睦','xiōng dì mù','孝在中','xiào zài zhōng'],
+['长者先','zhǎng zhě xiān','幼者后','yòu zhě hòu'],['冠必正','guān bì zhèng','纽必结','niǔ bì jié'],
+['衣贵洁','yī guì jié','不贵华','bù guì huá'],['对饮食','duì yǐn shí','勿拣择','wù jiǎn zé']];
+const FIN=[['步从容','bù cóng róng','立端正','lì duān zhèng'],['事勿忙','shì wù máng','忙多错','máng duō cuò'],
+['将入门','jiāng rù mén','问孰存','wèn shú cún'],['将上堂','jiāng shàng táng','声必扬','shēng bì yáng'],
+['用人物','yòng rén wù','须明求','xū míng qiú'],['借人物','jiè rén wù','及时还','jí shí huán'],
+['路遇长','lù yù zhǎng','疾趋揖','jí qū yī'],['缓揭帘','huǎn jiē lián','勿有声','wù yǒu shēng'],
+['宽转弯','kuān zhuǎn wān','勿触棱','wù chù léng'],['幼不学','yòu bù xué','老何为','lǎo hé wéi'],
+['为人子','wéi rén zǐ','方少时','fāng shào shí'],['亲师友','qīn shī yǒu','习礼仪','xí lǐ yí'],
+['子不学','zǐ bù xué','非所宜','fēi suǒ yí'],['知某数','zhī mǒu shù','识某文','shí mǒu wén']];
+
+const CONF=[['人','入','八'],['大','太','天','夫'],['日','目','田','白'],['土','士','王'],['千','干'],['午','牛'],
+['木','本','禾'],['乌','鸟'],['兔','免'],['买','卖'],['未','末'],['由','甲'],['旧','旦'],['休','体'],
+['贝','见'],['手','毛'],['爪','瓜'],['己','已','巳']];
+
+const CHAPTERS=[{name:'启蒙篇 · 三字经',emoji:'🌱',color:'#7cb518'},
+{name:'进阶篇 · 识词',emoji:'📚',color:'#4d9de0'},
+{name:'国学篇 · 弟子规',emoji:'🏮',color:'#ff6b5e'}];
+
+const LEVELS=[
+ {id:1,ch:0,name:'初来乍到',type:'char',bubbles:4,correct:1,rounds:5,pool:P1,conf:0},
+ {id:2,ch:0,name:'火眼金睛',type:'char',bubbles:5,correct:1,rounds:6,pool:P2,conf:.4},
+ {id:3,ch:0,name:'词语花园',type:'word',bubbles:6,correct:1,rounds:6,pool:W1,conf:0},
+ {id:4,ch:0,name:'经句寻宝',type:'char',bubbles:7,correct:1,rounds:6,pool:PSJJ,conf:.3},
+ {id:5,ch:1,name:'字海拾贝',type:'char',bubbles:8,correct:1,rounds:7,pool:PBIG,conf:.5},
+ {id:6,ch:1,name:'词语丰收',type:'word',bubbles:8,correct:2,rounds:6,pool:W2,conf:0},
+ {id:7,ch:1,name:'形近字挑战',type:'char',bubbles:9,correct:2,rounds:6,pool:PCONF,conf:.85},
+ {id:8,ch:1,name:'词汇达人',type:'word',bubbles:10,correct:2,rounds:7,pool:W3,conf:0},
+ {id:9,ch:2,name:'弟子规·应答',type:'phrase',bubbles:8,correct:1,rounds:6,pool:DZG1},
+ {id:10,ch:2,name:'三字经·对句',type:'phrase',bubbles:9,correct:1,rounds:7,pool:SZJ1},
+ {id:11,ch:2,name:'弟子规·进阶',type:'phrase',bubbles:10,correct:1,rounds:7,pool:DZG2},
+ {id:12,ch:2,name:'国学小状元',type:'phrase',bubbles:12,correct:1,rounds:8,pool:FIN}
+];
+
+function pyOf(type,t){ if(type==='char')return PY[t]||''; if(type==='word')return WORDS[t]||''; return ''; }
+
+/* ============ AUDIO SFX ============ */
+const SFX=(()=>{
+  let ctx=null,master=null,on=true;
+  function ensure(){ if(ctx)return; try{ctx=new (window.AudioContext||window.webkitAudioContext)();master=ctx.createGain();master.gain.value=.5;master.connect(ctx.destination);}catch(e){} }
+  function resume(){ if(ctx&&ctx.state==='suspended')ctx.resume(); }
+  function tone(f,d,type,g,t0,slide){ if(!on||!ctx)return; const t=ctx.currentTime+(t0||0); const o=ctx.createOscillator(),gn=ctx.createGain();
+    o.type=type||'sine'; o.frequency.setValueAtTime(f,t); if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(40,slide),t+d);
+    gn.gain.setValueAtTime(.0001,t); gn.gain.exponentialRampToValueAtTime(g||.2,t+.012); gn.gain.exponentialRampToValueAtTime(.0001,t+d);
+    o.connect(gn);gn.connect(master);o.start(t);o.stop(t+d+.02); }
+  return {
+    setOn(v){on=v;}, resume, ensure,
+    tap(){ ensure();resume(); tone(420,.08,'triangle',.18,0,680); },
+    ding(){ ensure();resume(); tone(880,.18,'sine',.22); tone(1318,.28,'sine',.18,.09); },
+    buzz(){ ensure();resume(); tone(196,.24,'sawtooth',.07); tone(147,.24,'sawtooth',.05); },
+    sparkle(){ ensure();resume(); tone(1568,.12,'sine',.14); tone(2093,.16,'sine',.1,.07); },
+    click(){ ensure();resume(); tone(620,.05,'square',.08); },
+    fanfare(){ ensure();resume(); [523,659,784,1046].forEach((f,i)=>tone(f,i<3?.2:.45,'triangle',.2,i*.13)); tone(1568,.3,'sine',.1,.5); }
+  };
+})();
+
+/* ============ TTS ============ */
+const TTS=(()=>{
+  const synth=window.speechSynthesis; let voice=null,on=true,curId=0,q=[],speaking=false;
+  function pick(){ if(!synth)return; const vs=synth.getVoices(); let cands=vs.filter(v=>/^zh/i.test(v.lang));
+    voice=cands.find(v=>/CN|Hans|Tingting|Meijia/i.test(v.lang+v.name))||cands[0]||vs.find(v=>/zh/i.test(v.lang))||null; }
+  if(synth){ pick(); synth.onvoiceschanged=pick; }
+  function pump(){ if(speaking||!q.length)return; const it=q.shift(); speaking=true; const u=new SpeechSynthesisUtterance(it.text);
+    if(voice)u.voice=voice; u.lang=voice?voice.lang:'zh-CN'; u.rate=it.rate||.88; u.pitch=it.pitch||1.1; u.volume=1;
+    const fin=()=>{ if(it.id!==curId)return; speaking=false; it.onend&&it.onend(); pump(); };
+    u.onend=fin;u.onerror=fin;
+    setTimeout(()=>{ if(it.id!==curId)return; try{ if(synth.paused)synth.resume(); synth.speak(u);}catch(e){fin();} },35); }
+  return {
+    setOn(v){on=v; if(!v){curId++;q=[];speaking=false;try{synth&&synth.cancel();}catch(e){}}},
+    get on(){return on;},
+    speak(text,opt={}){ if(!on||!synth){opt.onend&&opt.onend();return;}
+      if(opt.interrupt!==false){curId++;q=[];try{synth.cancel();}catch(e){}speaking=false;}
+      q.push({text,opt,onend:opt.onend,rate:opt.rate,pitch:opt.pitch,id:curId}); pump(); }
+  };
+})();
+
+/* ============ STORE ============ */
+const Store=(()=>{
+  const K='paopao-guoxue-v2'; let d={stars:{},sfx:true,voice:true};
+  function load(){ try{const s=JSON.parse(localStorage.getItem(K)); if(s)d=Object.assign(d,s);}catch(e){} }
+  function save(){ try{localStorage.setItem(K,JSON.stringify(d));}catch(e){} }
+  load();
+  return { get stars(){return d.stars;}, get sfx(){return d.sfx;}, get voice(){return d.voice;},
+    setStar(id,n){ d.stars[id]=Math.max(d.stars[id]||0,n); save(); },
+    setSfx(v){d.sfx=v;save();}, setVoice(v){d.voice=v;save();} };
+})();
+
+/* ============ CONFETTI ============ */
+const Confetti=(()=>{
+  const cv=$('#confetti'),c=cv.getContext('2d'); let parts=[],raf=0,dpr=1;
+  function size(){ dpr=Math.min(2,window.devicePixelRatio||1); cv.width=innerWidth*dpr; cv.height=innerHeight*dpr; cv.style.width=innerWidth+'px'; cv.style.height=innerHeight+'px'; c.setTransform(dpr,0,0,dpr,0,0); }
+  size(); addEventListener('resize',size);
+  function burst(x,y,n,spread){ for(let i=0;i<n;i++){ const a=Math.random()*Math.PI*2,sp=(spread||6)*(0.4+Math.random());
+    parts.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-3,g:.18+Math.random()*.1,rot:Math.random()*6,vr:(Math.random()-.5)*.4,
+      c:PAL[(Math.random()*PAL.length)|0],s:5+Math.random()*6,life:1,dec:.012+Math.random()*.012,sh:Math.random()<.5?0:1}); }
+    if(!raf)loop(); }
+  function loop(){ c.clearRect(0,0,innerWidth,innerHeight);
+    for(let i=parts.length-1;i>=0;i--){ const p=parts[i]; p.vy+=p.g; p.x+=p.vx; p.y+=p.vy; p.rot+=p.vr; p.life-=p.dec;
+      if(p.life<=0||p.y>innerHeight+30){parts.splice(i,1);continue;}
+      c.save();c.globalAlpha=Math.max(0,p.life);c.translate(p.x,p.y);c.rotate(p.rot);c.fillStyle=p.c;
+      if(p.sh)c.fillRect(-p.s/2,-p.s/2,p.s,p.s*.6); else{c.beginPath();c.arc(0,0,p.s/2,0,7);c.fill();} c.restore(); }
+    if(parts.length)raf=requestAnimationFrame(loop); else{raf=0;c.clearRect(0,0,innerWidth,innerHeight);} }
+  return {burst};
+})();
+
+/* ============ HELPERS ============ */
+function vib(p){ try{navigator.vibrate&&navigator.vibrate(p);}catch(e){} }
+function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];} return a; }
+function pick(a){ return a[(Math.random()*a.length)|0]; }
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+const PRAISE=['对啦！','真棒！','好样的！','太厉害了！','答对啦！','你真聪明！'];
+const ENCO=['再找找','不对哦','换一个试试','加油！'];
+
+function toast(x,y,text,kind){ const t=document.createElement('div'); t.className='toast '+kind; t.textContent=text;
+  t.style.left=x+'px'; t.style.top=y+'px'; $('#toastLayer').appendChild(t); setTimeout(()=>t.remove(),1000); }
+
+/* ============ SCREENS ============ */
+function show(id){ $$('.screen').forEach(s=>s.classList.toggle('active',s.id===id)); }
+
+/* ============ LOGO ============ */
+(function(){ const name='泡泡国学堂'; const el=$('#logo');
+  name.split('').forEach((ch,i)=>{ const s=document.createElement('span'); s.textContent=ch; s.style.color=PAL[i%PAL.length];
+    s.style.setProperty('--rot',(i%2?5:-5)+'deg'); s.style.animationDelay=(i*.12)+'s'; el.appendChild(s); });
+})();
+$('#mImg1').src=MASCOT1; $('#mImg1').onerror=function(){this.style.display='none';};
+$('#mImg2').src=MASCOT2; $('#mImg2').onerror=function(){this.style.display='none';};
+
+/* ============ SETTINGS UI ============ */
+function syncToggles(){ $('#tglSfx').classList.toggle('off',!Store.sfx); $('#tglVoice').classList.toggle('off',!Store.voice);
+  $('#tglSfx').querySelector('.ic').textContent=Store.sfx?'🔊':'🔇'; $('#tglVoice').querySelector('.ic').textContent=Store.voice?'🗣️':'🔕';
+  $('#btnMute').textContent=(Store.sfx&&Store.voice)?'🔊':'';
+  SFX.setOn(Store.sfx); TTS.setOn(Store.voice); }
+$('#tglSfx').onclick=()=>{ Store.setSfx(!Store.sfx); if(Store.sfx){SFX.ensure();SFX.click();} syncToggles(); };
+$('#tglVoice').onclick=()=>{ Store.setVoice(!Store.voice); if(Store.voice)TTS.speak('语音已打开'); syncToggles(); };
+$('#btnMute').onclick=()=>{ const anyOn=Store.sfx||Store.voice; Store.setSfx(!anyOn); Store.setVoice(!anyOn);
+  if(!anyOn){SFX.ensure();SFX.click();TTS.speak('声音打开啦');} syncToggles(); };
+$('#btnHelp').onclick=()=>$('#modalHelp').classList.add('show');
+$('#btnHelpOk').onclick=()=>$('#modalHelp').classList.remove('show');
+
+/* ============ LEVEL MAP ============ */
+function unlocked(id){ return id===1 || (Store.stars[id-1]||0)>=1; }
+function continueId(){ for(const L of LEVELS){ if(unlocked(L.id)&&(Store.stars[L.id]||0)<3)return L.id; } return 12; }
+function renderMap(){
+  let total=0; LEVELS.forEach(L=>total+=(Store.stars[L.id]||0)); $('#totalStars').textContent='⭐ '+total+'/36';
+  const wrap=$('#mapWrap'); wrap.innerHTML=''; const cur=continueId();
+  CHAPTERS.forEach((ch,ci)=>{
+    const row=document.createElement('div'); row.className='mapRow';
+    const banner=document.createElement('div'); banner.className='chBanner'; banner.style.background=ch.color;
+    banner.textContent=ch.emoji+' '+ch.name; row.appendChild(banner);
+    const inner=document.createElement('div'); inner.className='rowInner';
+    inner.innerHTML='<svg class="rowPath" viewBox="0 0 100 40" preserveAspectRatio="none"><path d="M6 20 C 24 4, 38 36, 50 20 S 78 4, 94 20" fill="none" stroke="#2b3a55" stroke-opacity=".22" stroke-width="1.4" stroke-dasharray="1.6 2.6" vector-effect="non-scaling-stroke"/></svg>';
+    const nodes=document.createElement('div'); nodes.className='nodes';
+    LEVELS.filter(L=>L.ch===ci).forEach(L=>{
+      const w=document.createElement('div'); w.className='nodeWrap';
+      const n=document.createElement('button'); n.className='node';
+      const ul=unlocked(L.id); const st=Store.stars[L.id]||0;
+      if(!ul){ n.classList.add('locked'); n.innerHTML='<span class="lk">🔒</span>'; }
+      else{ n.style.background=PAL[(L.id-1)%PAL.length]; n.innerHTML='<span class="nm">'+L.id+'</span>'; if(L.id===cur)n.classList.add('current'); }
+      const sr=document.createElement('div'); sr.className='stars';
+      for(let i=0;i<3;i++){ const s=document.createElement('i'); s.textContent='★'; if(i<st)s.classList.add('on'); sr.appendChild(s); }
+      n.onclick=()=>{ if(!ul){ n.classList.add('shake'); setTimeout(()=>n.classList.remove('shake'),450); SFX.click();
+        toast(inner.getBoundingClientRect().left+inner.clientWidth/2, n.getBoundingClientRect().top, '先过上一关哦','bad'); return; }
+      SFX.click(); startLevel(L.id); };
+      w.appendChild(n); w.appendChild(sr); nodes.appendChild(w);
+    });
+    inner.appendChild(nodes); row.appendChild(inner); wrap.appendChild(row);
+    if(ci<CHAPTERS.length-1){ const lk=document.createElement('div'); lk.className='rowLink'; lk.textContent='﹀'; wrap.appendChild(lk); }
+  });
+}
+
+/* ============ GAME ENGINE ============ */
+let G=null; // game state
+function startLevel(id){
+  const cfg=LEVELS.find(L=>L.id===id);
+  G={cfg,round:0,found:0,need:cfg.correct,mistakes:0,streak:0,maxStreak:0,start:Date.now(),
+    bubbles:[],raf:0,sid:(G?G.sid+1:1),lock:true,prev:null,rt:null,W:0,H:0};
+  show('scr-game');
+  $('#lvlChip').textContent='第'+id+'关 · '+cfg.name;
+  $('#missChip').classList.remove('show'); $('#missN').textContent='0';
+  $('#clearOverlay').classList.remove('show');
+  $('#comboChip').classList.remove('show');
+  buildDots();
+  $('#playArea').innerHTML='<div id="comboChip"></div>';
+  measure();
+  nextRound();
+  if(!G.raf)loop(performance.now());
+}
+function buildDots(){ const w=$('#dotsWrap'); w.innerHTML=''; for(let i=0;i<G.cfg.rounds;i++){ const d=document.createElement('span'); d.className='dot'; w.appendChild(d); } }
+function updateDots(){ const ds=$$('#dotsWrap .dot'); ds.forEach((d,i)=>{ d.classList.toggle('done',i<G.round-1); d.classList.toggle('cur',i===G.round-1); }); }
+function measure(){ const r=$('#playArea').getBoundingClientRect(); G.W=r.width; G.H=r.height; }
+
+function makeTexts(){
+  const cfg=G.cfg;
+  if(cfg.type==='phrase'){
+    let pool=shuffle(cfg.pool).filter(p=>p!==G.prev); if(!pool.length)pool=shuffle(cfg.pool);
+    const target=pool[0]; G.prev=target; G.rt={type:'phrase',a:target[0],apy:target[1],b:target[2],bpy:target[3]};
+    const others=shuffle(cfg.pool.filter(p=>p!==target)).map(p=>p[2]);
+    const distractors=others.slice(0,cfg.bubbles-cfg.correct);
+    const texts=[...Array(cfg.correct).fill(target[2]),...distractors];
+    return {texts,targetText:target[2]};
+  } else {
+    let pool=shuffle(cfg.pool).filter(t=>t!==G.prev); if(!pool.length)pool=shuffle(cfg.pool);
+    const target=pool[0]; G.prev=target; G.rt={type:cfg.type,text:target,py:pyOf(cfg.type,target)};
+    let distractorPool=shuffle(cfg.pool.filter(t=>t!==target));
+    const need=cfg.bubbles-cfg.correct; let distractors=distractorPool.slice(0,need);
+    if(cfg.conf && Math.random()<cfg.conf){
+      const set=CONF.find(s=>s.includes(target));
+      if(set){ const c=pick(set.filter(x=>x!==target));
+        if(c && !distractors.includes(c)){ if(distractors.length>=need)distractors[distractors.length-1]=c; else distractors.push(c); } }
+    }
+    distractors=distractors.slice(0,need);
+    const texts=[...Array(cfg.correct).fill(target),...distractors];
+    return {texts,targetText:target};
+  }
+}
+
+function radiusFor(len){
+  const minDim=Math.min(G.W,G.H), area=G.W*G.H, count=G.cfg.bubbles;
+  const maxR=0.5*Math.sqrt(area/(count*2.1));
+  let r1=clamp(minDim*0.085,28,60);
+  let r=r1*[1,1.16,1.3][Math.min(2,len-1)];
+  r=Math.min(r,maxR); r=Math.max(r,22);
+  const fs=len===1?r*0.92:len===2?r*0.6:Math.max(13,r*0.5);
+  return {r,fs};
+}
+
+function nextRound(){
+  G.round++; G.found=0; G.lock=true;
+  updateDots();
+  // clear old
+  G.bubbles.forEach(b=>{ if(b.el&&b.el.parentNode){ b.el.classList.add('shrink'); setTimeout(()=>b.el.remove(),300); } });
+  G.bubbles=[];
+  const {texts,targetText}=makeTexts();
+  const sh=shuffle(texts.map((t,i)=>({t,i})));
+  const placed=[];
+  sh.forEach((item,idx)=>{
+    const len=item.t.length; const {r,fs}=radiusFor(len);
+    let x,y,ok=false;
+    for(let k=0;k<70;k++){ x=r+Math.random()*(G.W-2*r); y=r+Math.random()*(G.H-2*r);
+      ok=placed.every(p=>Math.hypot(p.x-x,p.y-y)>p.r+r+8); if(ok)break; }
+    if(!ok){ x=r+Math.random()*(G.W-2*r); y=r+Math.random()*(G.H-2*r); }
+    placed.push({x,y,r});
+    const ang=Math.random()*Math.PI*2; const base=clamp(Math.min(G.W,G.H)*0.05,20,42); const sp=base*(0.7+Math.random()*0.6);
+    const b={x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,r,fs,text:item.t,isTarget:item.t===targetText,found:false,dead:false,
+      color:PAL[(item.i+idx)%PAL.length],d:(Math.random()*2).toFixed(2)};
+    const el=document.createElement('button'); el.className='bubble spawn'; el.style.setProperty('--c',b.color);
+    el.style.width=el.style.height=(2*r)+'px'; el.style.setProperty('--sd',(idx*0.04)+'s');
+    el.style.setProperty('--pos','translate3d('+(x-r)+'px,'+(y-r)+'px,0)');
+    el.style.transform='translate3d('+(x-r)+'px,'+(y-r)+'px,0)';
+    const tx=document.createElement('span'); tx.className='btxt'; tx.textContent=item.t; tx.style.fontSize=fs+'px'; tx.style.setProperty('--d',b.d+'s');
+    if(len>=3)tx.style.letterSpacing='-1px';
+    el.appendChild(tx); el._b=b; b.el=el; $('#playArea').appendChild(el);
+    G.bubbles.push(b);
+  });
+  cardListen();
+  setTimeout(()=>{ if(!G||G.sid!==arguments.callee.sid)return; },0);
+  const sid=G.sid;
+  setTimeout(()=>{ if(!G||G.sid!==sid)return; G.lock=false; speakTarget(); },650);
+}
+
+function speakTarget(){
+  const rt=G.rt; const txt=rt.type==='phrase'?rt.a:rt.text;
+  setSpeaking(true); TTS.speak(txt,{onend:()=>setSpeaking(false)});
+  if(!TTS.on)setTimeout(()=>setSpeaking(false),900);
+}
+function setSpeaking(v){ $('#btnSpeak').classList.toggle('speaking',v); }
+
+function cardListen(){
+  const card=$('#promptCard'); card.classList.remove('reveal');
+  const rt=G.rt;
+  if(rt.type==='phrase'){ $('#pBig').innerHTML=rt.a+'<span class="q">，？</span>'; $('#pSub').textContent='听一听，下一句是什么？'; }
+  else { $('#pBig').textContent='听一听，找一找'; $('#pSub').textContent='找到读这个音的泡泡'; }
+}
+function cardReveal(){
+  const card=$('#promptCard'); card.classList.add('reveal');
+  const rt=G.rt;
+  if(rt.type==='phrase'){ $('#pBig').innerHTML='<span class="ra">'+rt.a+'</span><span class="ar">➜</span><span class="rb">'+rt.b+'</span>';
+    $('#pSub').innerHTML='<span class="py">'+rt.apy+' → '+rt.bpy+'</span>'; }
+  else { $('#pBig').textContent=rt.text; $('#pSub').innerHTML='<span class="py">'+rt.py+'</span>'; }
+}
+
+$('#btnSpeak').onclick=()=>{ if(!G)return; SFX.click(); speakTarget(); };
+$('#btnHint').onclick=()=>{ if(!G)return; SFX.click(); const rt=G.rt;
+  if(rt.type==='phrase'){ setSpeaking(true); TTS.speak(rt.a+'，'+rt.b,{onend:()=>setSpeaking(false)});
+    $('#pSub').innerHTML='<span class="py">提示：'+rt.bpy+'</span>'; }
+  else { setSpeaking(true); TTS.speak(rt.text,{onend:()=>setSpeaking(false)});
+    $('#pSub').innerHTML='<span class="py">提示：'+rt.py+'</span>'; }
+  if(!TTS.on)setTimeout(()=>setSpeaking(false),900);
+};
+
+function tapBubble(b,clientX,clientY){
+  if(G.lock||b.dead)return;
+  SFX.tap(); b.vy-=26; b.vx+=(Math.random()-.5)*20;
+  TTS.speak(b.text,{interrupt:true});
+  if(b.isTarget&&!b.found){
+    b.found=true; b.dead=true; G.found++; G.streak++; G.maxStreak=Math.max(G.maxStreak,G.streak);
+    vib(20); SFX.ding();
+    const rc=b.el.getBoundingClientRect();
+    toast(clientX,clientY-10,pick(PRAISE),'good');
+    Confetti.burst(rc.left+rc.width/2,rc.top+rc.height/2,14,5);
+    b.el.classList.add('burst'); G.bubbles=G.bubbles.filter(x=>x!==b);
+    showCombo();
+    if(G.found>=G.need)roundWin();
+  } else if(!b.isTarget){
+    G.mistakes++; G.streak=0; hideCombo();
+    vib([60]); SFX.buzz();
+    toast(clientX,clientY-10,'✗ '+pick(ENCO),'bad');
+    b.el.classList.remove('shake'); void b.el.offsetWidth; b.el.classList.add('shake');
+    setTimeout(()=>b.el&&b.el.classList.remove('shake'),500);
+    const mc=$('#missChip'); mc.classList.add('show'); $('#missN').textContent=G.mistakes;
+  }
+}
+function showCombo(){ if(G.streak>=2){ const c=$('#comboChip'); c.textContent='连对 ×'+G.streak+' ⭐'; c.classList.remove('show'); void c.offsetWidth; c.classList.add('show'); } }
+function hideCombo(){ $('#comboChip').classList.remove('show'); }
+
+$('#playArea').addEventListener('pointerup',e=>{
+  const el=e.target.closest&&e.target.closest('.bubble'); if(!el||!el._b)return;
+  tapBubble(el._b,e.clientX,e.clientY);
+});
+
+function roundWin(){
+  G.lock=true; cardReveal(); SFX.sparkle();
+  const pr=pick(['真棒','太厉害了','好样的','答对啦','你真聪明','小明星']);
+  TTS.speak(pr,{interrupt:false});
+  const sid=G.sid;
+  setTimeout(()=>{ if(!G||G.sid!==sid)return;
+    if(G.round<G.cfg.rounds)nextRound(); else levelClear(); },1700);
+}
+
+function levelClear(){
+  cancelAnimationFrame(G.raf); G.raf=0;
+  const secs=Math.max(1,Math.round((Date.now()-G.start)/1000));
+  const stars=G.mistakes===0?3:G.mistakes<=2?2:1;
+  Store.setStar(G.cfg.id,stars);
+  const ov=$('#clearOverlay');
+  const last=G.cfg.id===LEVELS.length;
+  $('#cTitle').textContent=last?'全部通关！🎉':'过关啦！';
+  $('#cSub').textContent=last?'你是国学小状元！':pick(['你是识字小明星','继续加油哦','太了不起啦']);
+  const cs=$('#cStars'); cs.innerHTML='';
+  for(let i=0;i<3;i++){ const s=document.createElement('span'); s.className='cStar'; s.textContent='★';
+    if(i<stars){ s.classList.add('on'); s.style.animationDelay=(0.3+i*0.35)+'s'; } cs.appendChild(s); }
+  $('#cStats').textContent='用时 '+secs+' 秒 · 失误 '+G.mistakes+' 次 · 最高连对 '+G.maxStreak;
+  $('#btnNext').style.display=last?'none':'flex';
+  ov.classList.add('show');
+  SFX.fanfare();
+  setTimeout(()=>{ Confetti.burst(innerWidth*0.3,innerHeight*0.4,40,8); Confetti.burst(innerWidth*0.7,innerHeight*0.4,40,8); },150);
+  setTimeout(()=>{ [0,1,2].forEach(i=>{ if(i<stars)setTimeout(()=>SFX.sparkle(),300+i*350); }); },300);
+  renderMap();
+}
+$('#btnNext').onclick=()=>{ const nid=G.cfg.id+1; if(LEVELS.find(L=>L.id===nid))startLevel(nid); else{show('scr-levels');} };
+$('#btnReplay').onclick=()=>startLevel(G.cfg.id);
+$('#btnMap2').onclick=()=>{ cancelAnimationFrame(G&&G.raf); show('scr-levels'); renderMap(); };
+$('#btnHome').onclick=()=>{ if(G){G.sid++;cancelAnimationFrame(G.raf);G.raf=0;} show('scr-levels'); renderMap(); };
+
+/* ============ PHYSICS ============ */
+function loop(ts){
+  if(!G){return;}
+  if(!G._last)G._last=ts;
+  let dt=(ts-G._last)/1000; G._last=ts; dt=Math.min(dt,0.033);
+  step(dt); render();
+  G.raf=requestAnimationFrame(loop);
+}
+function step(dt){
+  const bs=G.bubbles, W=G.W, H=G.H;
+  const minDim=Math.min(W,H); const base=clamp(minDim*0.05,20,42); const minS=base*0.5, maxS=base*1.7;
+  for(const b of bs){
+    b.x+=b.vx*dt; b.y+=b.vy*dt;
+    if(b.x-b.r<0){b.x=b.r;b.vx=Math.abs(b.vx)*0.96;} if(b.x+b.r>W){b.x=W-b.r;b.vx=-Math.abs(b.vx)*0.96;}
+    if(b.y-b.r<0){b.y=b.r;b.vy=Math.abs(b.vy)*0.96;} if(b.y+b.r>H){b.y=H-b.r;b.vy=-Math.abs(b.vy)*0.96;}
+    b.vx+=(Math.random()-0.5)*16*dt; b.vy+=(Math.random()-0.5)*16*dt;
+    let sp=Math.hypot(b.vx,b.vy);
+    if(sp<minS){ if(sp<0.01){const a=Math.random()*7;b.vx=Math.cos(a)*minS;b.vy=Math.sin(a)*minS;} else{b.vx*=minS/sp;b.vy*=minS/sp;} }
+    else if(sp>maxS){ b.vx*=maxS/sp;b.vy*=maxS/sp; }
+  }
+  for(let i=0;i<bs.length;i++)for(let j=i+1;j<bs.length;j++){
+    const a=bs[i],c=bs[j]; let dx=c.x-a.x,dy=c.y-a.y; let d2=dx*dx+dy*dy; const rr=a.r+c.r;
+    if(d2<rr*rr){ let d=Math.sqrt(d2)||0.01; if(d<0.001){dx=Math.random()-.5;dy=Math.random()-.5;d=0.5;}
+      const nx=dx/d,ny=dy/d,overlap=rr-d; const im1=1/(a.r*a.r),im2=1/(c.r*c.r),ims=im1+im2;
+      const corr=overlap*0.85; a.x-=nx*corr*(im1/ims); a.y-=ny*corr*(im1/ims); c.x+=nx*corr*(im2/ims); c.y+=ny*corr*(im2/ims);
+      const rvx=c.vx-a.vx,rvy=c.vy-a.vy,rvn=rvx*nx+rvy*ny;
+      if(rvn<0){ const e=0.92, jimp=-(1+e)*rvn/ims; a.vx-=jimp*im1*nx; a.vy-=jimp*im1*ny; c.vx+=jimp*im2*nx; c.vy+=jimp*im2*ny; }
+    }
+  }
+}
+function render(){ for(const b of G.bubbles){ if(b.dead)continue; b.el.style.transform='translate3d('+(b.x-b.r)+'px,'+(b.y-b.r)+'px,0)'; b.el.style.setProperty('--pos','translate3d('+(b.x-b.r)+'px,'+(b.y-b.r)+'px,0)'); } }
+
+/* ============ NAV ============ */
+$('#btnStart').onclick=()=>{ SFX.ensure(); SFX.click(); TTS.speak('开始啦'); startLevel(continueId()); };
+$('#btnLevels').onclick=()=>{ SFX.click(); show('scr-levels'); renderMap(); };
+$('#btnBackMap').onclick=()=>{ SFX.click(); show('scr-start'); };
+
+/* ============ RESIZE ============ */
+let rT; addEventListener('resize',()=>{ clearTimeout(rT); rT=setTimeout(()=>{ if(G&&$('#scr-game').classList.contains('active')){ measure();
+  for(const b of G.bubbles){ b.x=clamp(b.x,b.r,G.W-b.r); b.y=clamp(b.y,b.r,G.H-b.r); } } },150); });
+addEventListener('orientationchange',()=>{ setTimeout(()=>{ if(G&&$('#scr-game').classList.contains('active')){ measure(); for(const b of G.bubbles){ b.x=clamp(b.x,b.r,G.W-b.r); b.y=clamp(b.y,b.r,G.H-b.r);} } },300); });
+
+/* ============ GLOBAL GUARDS ============ */
+document.addEventListener('contextmenu',e=>e.preventDefault());
+document.addEventListener('gesturestart',e=>e.preventDefault());
+let firstGesture=false;
+document.addEventListener('pointerdown',function once(){ if(firstGesture)return; firstGesture=true; SFX.ensure(); SFX.resume();
+  if(TTS.on)TTS.speak(' ',{rate:1}); },{once:false});
+
+/* ============ INIT ============ */
+syncToggles();
+renderMap();
+</script>
+</body>
+</html>
+

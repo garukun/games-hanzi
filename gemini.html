@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>汉字大冒险 - 儿童识字与国学启蒙</title>
+    
+    <!-- PWA / Web App 移动端独立全屏支持 -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="汉字大冒险">
+    <link rel="manifest" href="data:application/json;charset=utf-8,%7B%22name%22%3A%22%E6%B1%89%E5%AD%97%E5%A4%A7%E5%86%92%E9%99%A9%22%2C%22short_name%22%3A%22%E6%B1%89%E5%AD%97%E5%86%92%E9%99%A9%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23e0f2fe%22%2C%22theme_color%22%3A%22%230284c7%22%7D">
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            background: #f0f9ff;
+        }
+
+        #app-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 50%, #7dd3fc 100%);
+        }
+
+        /* 顶部状态栏 */
+        header {
+            height: 60px;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(8px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            z-index: 10;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .level-badge {
+            background: #ff7043;
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 1rem;
+            box-shadow: 0 3px 6px rgba(255, 112, 67, 0.3);
+        }
+
+        .settings-btn, .fullscreen-btn {
+            background: #0284c7;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.88rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 3px 6px rgba(2, 132, 199, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .fullscreen-btn {
+            background: #059669;
+            box-shadow: 0 3px 6px rgba(5, 150, 105, 0.3);
+        }
+
+        .settings-btn:active, .fullscreen-btn:active {
+            transform: scale(0.95);
+        }
+
+        .score-box {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #0284c7;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .combo-badge {
+            background: #e11d48;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 900;
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .combo-badge.active {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .star-count {
+            color: #f59e0b;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* 题目展示区 */
+        .question-bar {
+            padding: 10px 18px;
+            background: #ffffff;
+            margin: 8px 16px 0 16px;
+            border-radius: 18px;
+            box-shadow: 0 6px 16px rgba(14, 165, 233, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 10;
+        }
+
+        .target-prompt {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .speaker-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: #38bdf8;
+            border: none;
+            color: white;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(56, 189, 248, 0.4);
+            transition: transform 0.1s, background-color 0.2s;
+        }
+
+        .speaker-btn:active {
+            transform: scale(0.92);
+            background: #0284c7;
+        }
+
+        .target-text-container {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .target-label {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+
+        .target-text {
+            font-size: 1.5rem;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: 2px;
+        }
+
+        /* 游戏物理桌面 (Canvas) */
+        .game-canvas-wrapper {
+            flex: 1;
+            position: relative;
+            margin: 8px 16px 16px 16px;
+            background: rgba(255, 255, 255, 0.5);
+            border: 4px solid #ffffff;
+            border-radius: 24px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.05), 0 10px 25px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* 交互反馈 Overlay */
+        .feedback-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.5);
+            pointer-events: none;
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .feedback-overlay.show {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .feedback-icon {
+            font-size: 80px;
+            filter: drop-shadow(0 10px 15px rgba(0,0,0,0.2));
+        }
+
+        .feedback-text {
+            font-size: 1.8rem;
+            font-weight: 900;
+            color: white;
+            text-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            margin-top: -10px;
+        }
+
+        /* 弹窗通用样式 */
+        .modal {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            z-index: 30;
+        }
+
+        .modal.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-card {
+            background: white;
+            width: 90%;
+            max-width: 400px;
+            max-height: 90vh;
+            overflow-y: auto;
+            border-radius: 28px;
+            padding: 24px 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+            transform: translateY(20px);
+            transition: transform 0.3s;
+            position: relative;
+        }
+
+        .modal.active .modal-card {
+            transform: translateY(0);
+        }
+
+        .close-modal-btn {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 32px;
+            height: 32px;
+            background: #f1f5f9;
+            border: none;
+            border-radius: 50%;
+            font-size: 1.1rem;
+            color: #64748b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .close-modal-btn:hover {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+
+        .modal-title {
+            font-size: 1.4rem;
+            color: #0f172a;
+            margin-bottom: 12px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .modal-btn {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            border: none;
+            padding: 14px 24px;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+            transition: transform 0.1s;
+            width: 100%;
+            margin-top: 12px;
+        }
+
+        .modal-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* 设置表单项 */
+        .setting-group {
+            margin-bottom: 12px;
+            text-align: left;
+        }
+
+        .setting-label {
+            font-size: 0.85rem;
+            font-weight: bold;
+            color: #475569;
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .setting-options {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .option-btn {
+            flex: 1;
+            min-width: 75px;
+            padding: 7px 8px;
+            border: 2px solid #e2e8f0;
+            background: #f8fafc;
+            border-radius: 12px;
+            color: #334155;
+            font-size: 0.82rem;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .option-btn.selected {
+            border-color: #0284c7;
+            background: #e0f2fe;
+            color: #0369a1;
+        }
+
+        /* 呼吸跳动动画 */
+        @keyframes pulse-bounce {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .pulse-icon {
+            display: inline-block;
+            animation: pulse-bounce 1.5s infinite ease-in-out;
+        }
+
+        /* 适应小屏幕 iPhone */
+        @media (max-height: 600px) {
+            header { height: 48px; padding: 4px 10px; }
+            .question-bar { padding: 6px 12px; margin-top: 4px; }
+            .target-text { font-size: 1.2rem; }
+            .speaker-btn { width: 34px; height: 34px; font-size: 15px; }
+            .modal-card { padding: 16px 14px; }
+            .setting-group { margin-bottom: 8px; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="app-container">
+    <!-- 头部导航 -->
+    <header>
+        <div class="header-left">
+            <div class="level-badge" id="level-display">关卡 1</div>
+            <button class="settings-btn" id="open-settings-btn">⚙️ 设置</button>
+            <button class="fullscreen-btn" id="fullscreen-toggle-btn">⛶ 全屏</button>
+        </div>
+        <div class="score-box">
+            <div class="combo-badge" id="combo-badge">🔥 Combo x2</div>
+            <span class="star-count">⭐ <span id="stars-display">0</span></span>
+        </div>
+    </header>
+
+    <!-- 题目栏 -->
+    <div class="question-bar">
+        <div class="target-prompt">
+            <button class="speaker-btn" id="read-target-btn" title="点击听读音">🔊</button>
+            <div class="target-text-container">
+                <span class="target-label">请找到汉字/词语：</span>
+                <span class="target-text" id="target-word">--</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 气泡物理桌面区域 -->
+    <div class="game-canvas-wrapper" id="canvas-wrapper">
+        <canvas id="gameCanvas"></canvas>
+        <div class="feedback-overlay" id="feedback">
+            <div class="feedback-icon" id="feedback-icon">✨</div>
+            <div class="feedback-text" id="feedback-text">答对了！</div>
+        </div>
+    </div>
+
+    <!-- 首次开始引导弹窗（解锁 iOS/Android 浏览器音频权限） -->
+    <div class="modal active" id="start-modal">
+        <div class="modal-card" style="text-align: center;">
+            <div style="font-size: 65px; margin-bottom: 8px;" class="pulse-icon">🎈</div>
+            <div class="modal-title" style="font-size: 1.5rem;">汉字大冒险</div>
+            <div style="color:#64748b; font-size: 0.92rem; margin-bottom: 20px; line-height: 1.5;">
+                点击下方按钮开启声音<br>开启快乐国学识字之旅！
+            </div>
+            <button class="modal-btn" id="start-game-btn">🔊 点击开始游戏</button>
+        </div>
+    </div>
+
+    <!-- 设置弹窗 -->
+    <div class="modal" id="settings-modal">
+        <div class="modal-card" id="settings-card">
+            <button class="close-modal-btn" id="close-settings-x">✖</button>
+            <div class="modal-title">🎮 游戏设置</div>
+            
+            <!-- 设置1：适合年龄/难度划分 -->
+            <div class="setting-group">
+                <span class="setting-label">1. 适合年龄 / 难度：</span>
+                <div class="setting-options" id="age-options">
+                    <div class="option-btn selected" data-value="under5">👶 5岁以下 (简单启蒙)</div>
+                    <div class="option-btn" data-value="above5">👦 5岁以上 (常规难度)</div>
+                </div>
+            </div>
+
+            <!-- 设置2：词库选择 -->
+            <div class="setting-group">
+                <span class="setting-label">2. 词库选择：</span>
+                <div class="setting-options" id="bank-options">
+                    <div class="option-btn selected" data-value="dizigui">仅《弟子规》</div>
+                    <div class="option-btn" data-value="sanzijing">《弟子规》+《三字经》</div>
+                    <div class="option-btn" data-value="grade2">常用2000字(低年级)</div>
+                </div>
+            </div>
+
+            <!-- 设置3：出题类型 -->
+            <div class="setting-group">
+                <span class="setting-label">3. 汉字/短句类型：</span>
+                <div class="setting-options" id="mode-options">
+                    <div class="option-btn selected" data-value="single">仅单字</div>
+                    <div class="option-btn" data-value="phrase">仅词语/短句</div>
+                    <div class="option-btn" data-value="mixed">混合进阶</div>
+                </div>
+            </div>
+
+            <!-- 设置4：气泡移动速度 -->
+            <div class="setting-group">
+                <span class="setting-label">4. 移动速度：</span>
+                <div class="setting-options" id="speed-options">
+                    <div class="option-btn" data-value="slow">慢速</div>
+                    <div class="option-btn selected" data-value="normal">中速</div>
+                    <div class="option-btn" data-value="fast">快速</div>
+                </div>
+            </div>
+
+            <!-- 设置5：显示外观 (卡通小动物 / 彩虹气泡) -->
+            <div class="setting-group">
+                <span class="setting-label">5. 显示外观：</span>
+                <div class="setting-options" id="avatar-options">
+                    <div class="option-btn selected" data-value="bubble">彩虹气泡 🫧</div>
+                    <div class="option-btn" data-value="animal">可爱小动物 🐻</div>
+                </div>
+            </div>
+
+            <button class="modal-btn" id="save-settings-btn">保存并应用</button>
+        </div>
+    </div>
+
+    <!-- 通关结算弹窗 -->
+    <div class="modal" id="victory-modal">
+        <div class="modal-card" style="text-align: center;">
+            <div style="font-size: 60px; margin-bottom: 8px;">🎉</div>
+            <div class="modal-title" id="modal-title-text">太棒了！过关啦</div>
+            <div style="color:#64748b; font-size: 0.95rem; margin-bottom: 16px;" id="modal-desc-text">你学会了更多的汉字！继续保持！</div>
+            <button class="modal-btn" id="next-level-btn">下一关 🚀</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * 核心词库与数据分类
+ */
+const UNDER_5_CHARACTERS = "人口手足头目耳朵日月水火天地上下大小多少长短红黄蓝绿黑白东南西北春夏秋冬雨雪风云草木花树鸟兽虫鱼山川江河男女老少早晚真假好坏开关左右高低前后内外买卖".split("");
+
+const DIZIGUI_CHARACTERS = "弟子规圣人训首孝悌次谨信泛爱众而亲仁有余力则学文父母呼应勿缓命行懒教须敬听责顺承冬温夏凊晨省昏定出必告反面居常业无变事虽小擅为苟子道亏物私藏亲所好力具恶尽去身有伤贻忧德重贻羞亲爱我孝何难恶大方亲有过谏使更吾色柔吾声谏不入悦复谏号泣随挞无怨亲有疾药先尝昼夜侍不离床丧三年常悲咽居处变酒肉绝丧尽礼祭尽诚事死如事生".split("");
+
+const DIZIGUI_PHRASES = [
+    "弟子规", "圣人训", "首孝悌", "次谨信", "泛爱众", "而亲仁", "有余力", "则学文",
+    "父母呼", "应勿缓", "父母命", "行勿懒", "父母教", "须敬听", "父母责", "须顺承",
+    "冬则温", "夏则凊", "晨则省", "昏则定", "出必告", "反必面", "居有常", "业无变",
+    "事虽小", "勿擅为", "苟擅为", "子道亏", "物虽小", "勿私藏", "苟私藏", "亲心伤"
+];
+
+const SANZIJING_CHARACTERS = "人之初性本善性相近习相远苟不教性乃迁教之道贵以专昔孟母择邻处子不学断机杼窦燕山有义方教五子名俱扬养不教父之过教不严师之惰子不学非所宜幼不学老何为玉不琢不成器人不学不知义为人子方少时亲师友习礼仪香九龄能温席孝于亲所当执融四岁能让梨弟于长宜先知".split("");
+
+const SANZIJING_PHRASES = [
+    "人之初", "性本善", "性相近", "习相远", "苟不教", "性乃迁", "教之道", "贵以专",
+    "昔孟母", "择邻处", "子不學", "断机杼", "养不教", "父之过", "教不严", "师之惰",
+    "玉不琢", "不成器", "人不学", "不知义", "香九龄", "能温席", "融四岁", "能让梨"
+];
+
+const PRIMARY_GRADE2_CHARACTERS = "日月水火天地上下木石田口手足头目耳朵大小多少长短红黄蓝绿黑白东南西北春夏秋冬日月星辰雨雪风云草木花树鸟兽虫鱼山川江河男女老少开关进出左右高低前后内外买卖古今早晚真假好坏快乐学习写字看书画画歌唱跳舞做饭跑步游水听话懂事关心帮忙干净美丽勇敢聪明高兴认真辛苦平安健康快乐天天向上".split("");
+
+const PRIMARY_GRADE2_PHRASES = [
+    "太阳", "月亮", "星星", "白云", "花草", "树木", "小鸟", "游鱼", "学习", "读书",
+    "写字", "画画", "唱歌", "跳舞", "跑步", "做饭", "干净", "美丽", "勇敢", "聪明",
+    "高兴", "快乐", "认真", "平安", "健康", "帮忙", "关心", "老师", "同学", "朋友"
+];
+
+const PRAISE_WORDS = ["好棒呀！", "真聪明！", "答对啦！", "真厉害！", "太优秀了！", "真赞！"];
+
+let gameSettings = {
+    age: 'under5',      
+    bank: 'dizigui',   
+    mode: 'single',     
+    speed: 'normal',   
+    avatar: 'bubble'    
+};
+
+const SPEED_MULTIPLIERS = {
+    slow: 1.2,
+    normal: 2.8,
+    fast: 4.8
+};
+
+const ANIMAL_TYPES = ['bear', 'rabbit', 'cat', 'panda', 'frog'];
+
+class Particle {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.size = Math.random() * 8 + 4;
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 8 + 2;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+        this.color = ['#f43f5e', '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899'][Math.floor(Math.random() * 6)];
+        this.alpha = 1;
+        this.decay = Math.random() * 0.02 + 0.015;
+        this.shape = Math.random() > 0.5 ? 'circle' : 'star';
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += 0.15;
+        this.alpha -= this.decay;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, this.alpha);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        if (this.shape === 'circle') {
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        } else {
+            ctx.rect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+        }
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+// 增强移动端音频与 SpeechSynthesis 解锁支持
+class AudioController {
+    constructor() {
+        this.synth = window.speechSynthesis;
+        this.voice = null;
+        this.unlocked = false;
+        this.initVoice();
+    }
+
+    initVoice() {
+        if ('speechSynthesis' in window) {
+            let loadVoices = () => {
+                let voices = this.synth.getVoices();
+                this.voice = voices.find(v => v.lang.includes('zh') || v.lang.includes('CN')) || voices[0];
+            };
+            loadVoices();
+            if (this.synth.onvoiceschanged !== undefined) {
+                this.synth.onvoiceschanged = loadVoices;
+            }
+        }
+    }
+
+    // 激活/解锁 iOS & Android Web Audio 及 Speech 权限
+    unlockAudio() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if (ctx.state === 'suspended') {
+                ctx.resume();
+            }
+            if (this.synth) {
+                this.synth.cancel();
+                // 播放一段静音字符促使 iOS 激活语音接口
+                const dummy = new SpeechSynthesisUtterance('');
+                dummy.lang = 'zh-CN';
+                this.synth.speak(dummy);
+            }
+            this.unlocked = true;
+        } catch (e) {
+            console.log("Audio unlock failed", e);
+        }
+    }
+
+    speak(text, speed = 0.85, onEndCallback = null) {
+        if (!this.synth) return;
+        
+        // 避免 iOS 上语音队列卡死
+        this.synth.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = speed;
+        utterance.pitch = 1.15;
+        
+        if (!this.voice) {
+            this.initVoice();
+        }
+        if (this.voice) {
+            utterance.voice = this.voice;
+        }
+        utterance.lang = 'zh-CN';
+        
+        if (onEndCallback) {
+            utterance.onend = onEndCallback;
+        }
+
+        // iOS Safari 兼容延迟处理
+        setTimeout(() => {
+            this.synth.speak(utterance);
+        }, 50);
+    }
+
+    playSFX(type) {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if (ctx.state === 'suspended') {
+                ctx.resume();
+            }
+
+            if (type === 'correct') {
+                const freqs = [523.25, 659.25, 783.99, 1046.50];
+                freqs.forEach((f, idx) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(f, ctx.currentTime + idx * 0.08);
+                    gain.gain.setValueAtTime(0.25, ctx.currentTime + idx * 0.08);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.08 + 0.3);
+                    osc.start(ctx.currentTime + idx * 0.08);
+                    osc.stop(ctx.currentTime + idx * 0.08 + 0.3);
+                });
+            } else if (type === 'cheer') {
+                const notes = [400, 600, 800, 1200];
+                notes.forEach((f, i) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(f, ctx.currentTime + i * 0.06);
+                    gain.gain.setValueAtTime(0.2, ctx.currentTime + i * 0.06);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.06 + 0.2);
+                    osc.start(ctx.currentTime + i * 0.06);
+                    osc.stop(ctx.currentTime + i * 0.06 + 0.2);
+                });
+            } else if (type === 'wrong') {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(180, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(110, ctx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.25, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.2);
+            } else if (type === 'levelUp') {
+                const freqs = [523.25, 659.25, 783.99, 1046.50, 1318.51];
+                freqs.forEach((f, idx) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(f, ctx.currentTime + idx * 0.1);
+                    gain.gain.setValueAtTime(0.3, ctx.currentTime + idx * 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.1 + 0.4);
+                    osc.start(ctx.currentTime + idx * 0.1);
+                    osc.stop(ctx.currentTime + idx * 0.1 + 0.4);
+                });
+            }
+        } catch (e) {
+            console.log("Audio disabled");
+        }
+    }
+}
+
+class Bubble {
+    constructor(x, y, radius, text, isTarget, colorScheme, speedMultiplier, animalType) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.text = text;
+        this.isTarget = isTarget;
+        this.colorScheme = colorScheme;
+        this.animalType = animalType;
+
+        const angle = Math.random() * Math.PI * 2;
+        const speed = (0.8 + Math.random() * 0.6) * speedMultiplier;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+        
+        this.mass = radius;
+        this.scale = 1;
+        this.targetScale = 1;
+        this.smileTimer = 0;
+    }
+
+    update(width, height) {
+        this.scale += (this.targetScale - this.scale) * 0.1;
+        if (this.smileTimer > 0) {
+            this.smileTimer--;
+        }
+
+        this.x += this.vx;
+        this.y += this.vy;
+
+        if (this.x - this.radius < 0) {
+            this.x = this.radius;
+            this.vx *= -1;
+        } else if (this.x + this.radius > width) {
+            this.x = width - this.radius;
+            this.vx *= -1;
+        }
+
+        if (this.y - this.radius < 0) {
+            this.y = this.radius;
+            this.vy *= -1;
+        } else if (this.y + this.radius > height) {
+            this.y = height - this.radius;
+            this.vy *= -1;
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.scale(this.scale, this.scale);
+
+        if (gameSettings.avatar === 'animal') {
+            this.drawAnimal(ctx);
+        } else {
+            this.drawBubble(ctx);
+        }
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = (gameSettings.avatar === 'animal' && this.animalType === 'panda') ? '#0f172a' : this.colorScheme.textColor;
+        
+        let fontSize = this.radius * 0.6;
+        if (this.text.length === 2) fontSize = this.radius * 0.48;
+        if (this.text.length >= 3) fontSize = this.radius * 0.38;
+
+        ctx.font = `bold ${fontSize}px "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        const offsetY = (gameSettings.avatar === 'animal') ? this.radius * 0.12 : 2;
+        ctx.fillText(this.text, 0, offsetY);
+
+        ctx.restore();
+    }
+
+    drawBubble(ctx) {
+        const gradient = ctx.createRadialGradient(
+            -this.radius * 0.3, -this.radius * 0.3, this.radius * 0.1,
+            0, 0, this.radius
+        );
+        gradient.addColorStop(0, '#ffffff');
+        gradient.addColorStop(0.3, this.colorScheme.bgLight);
+        gradient.addColorStop(1, this.colorScheme.bgDark);
+
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = gradient;
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.12)';
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetY = 3;
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(-this.radius * 0.3, -this.radius * 0.3, this.radius * 0.25, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+        ctx.fill();
+    }
+
+    drawAnimal(ctx) {
+        const r = this.radius;
+        const isSmiling = this.smileTimer > 0;
+
+        ctx.fillStyle = this.colorScheme.bgDark;
+        if (this.animalType === 'rabbit') {
+            ctx.beginPath();
+            ctx.ellipse(-r * 0.35, -r * 0.9, r * 0.22, r * 0.5, -0.1, 0, Math.PI * 2);
+            ctx.ellipse(r * 0.35, -r * 0.9, r * 0.22, r * 0.5, 0.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#fbcfe8';
+            ctx.beginPath();
+            ctx.ellipse(-r * 0.35, -r * 0.9, r * 0.12, r * 0.35, -0.1, 0, Math.PI * 2);
+            ctx.ellipse(r * 0.35, -r * 0.9, r * 0.12, r * 0.35, 0.1, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (this.animalType === 'bear' || this.animalType === 'panda') {
+            const earColor = (this.animalType === 'panda') ? '#1e293b' : this.colorScheme.bgDark;
+            ctx.fillStyle = earColor;
+            ctx.beginPath();
+            ctx.arc(-r * 0.7, -r * 0.6, r * 0.3, 0, Math.PI * 2);
+            ctx.arc(r * 0.7, -r * 0.6, r * 0.3, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (this.animalType === 'cat') {
+            ctx.beginPath();
+            ctx.moveTo(-r * 0.8, -r * 0.2);
+            ctx.lineTo(-r * 0.6, -r * 1.05);
+            ctx.lineTo(-r * 0.15, -r * 0.75);
+            ctx.moveTo(r * 0.8, -r * 0.2);
+            ctx.lineTo(r * 0.6, -r * 1.05);
+            ctx.lineTo(r * 0.15, -r * 0.75);
+            ctx.fill();
+        } else if (this.animalType === 'frog') {
+            ctx.fillStyle = '#22c55e';
+            ctx.beginPath();
+            ctx.arc(-r * 0.5, -r * 0.75, r * 0.32, 0, Math.PI * 2);
+            ctx.arc(r * 0.5, -r * 0.75, r * 0.32, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(-r * 0.5, -r * 0.75, r * 0.2, 0, Math.PI * 2);
+            ctx.arc(r * 0.5, -r * 0.75, r * 0.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.arc(-r * 0.5, -r * 0.75, r * 0.1, 0, Math.PI * 2);
+            ctx.arc(r * 0.5, -r * 0.75, r * 0.1, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        const bodyColor = (this.animalType === 'panda') ? '#ffffff' : ((this.animalType === 'frog') ? '#4ade80' : this.colorScheme.bgLight);
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fillStyle = bodyColor;
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.12)';
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetY = 3;
+        ctx.fill();
+
+        if (this.animalType === 'panda') {
+            ctx.fillStyle = '#1e293b';
+            ctx.beginPath();
+            ctx.ellipse(-r * 0.4, -r * 0.25, r * 0.22, r * 0.16, -0.2, 0, Math.PI * 2);
+            ctx.ellipse(r * 0.4, -r * 0.25, r * 0.22, r * 0.16, 0.2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.fillStyle = 'rgba(244, 114, 182, 0.5)';
+        ctx.beginPath();
+        ctx.arc(-r * 0.55, -r * 0.05, r * 0.16, 0, Math.PI * 2);
+        ctx.arc(r * 0.55, -r * 0.05, r * 0.16, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = '#1e293b';
+        ctx.fillStyle = '#1e293b';
+        ctx.lineWidth = 2.5;
+
+        if (this.animalType !== 'frog') {
+            if (isSmiling) {
+                ctx.beginPath();
+                ctx.arc(-r * 0.35, -r * 0.28, r * 0.12, Math.PI, 0);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(r * 0.35, -r * 0.28, r * 0.12, Math.PI, 0);
+                ctx.stroke();
+            } else {
+                const eyeColor = (this.animalType === 'panda') ? '#ffffff' : '#1e293b';
+                ctx.fillStyle = eyeColor;
+                ctx.beginPath();
+                ctx.arc(-r * 0.35, -r * 0.28, r * 0.09, 0, Math.PI * 2);
+                ctx.arc(r * 0.35, -r * 0.28, r * 0.09, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        ctx.beginPath();
+        if (isSmiling) {
+            ctx.arc(0, -r * 0.15, r * 0.18, 0, Math.PI);
+            ctx.fillStyle = '#f43f5e';
+            ctx.fill();
+            ctx.stroke();
+        } else {
+            ctx.arc(0, -r * 0.22, r * 0.1, 0.1, Math.PI - 0.1);
+            ctx.stroke();
+        }
+    }
+
+    isPointInside(px, py) {
+        const dx = this.x - px;
+        const dy = this.y - py;
+        return Math.sqrt(dx * dx + dy * dy) <= this.radius;
+    }
+}
+
+const BUBBLE_COLORS = [
+    { bgLight: '#fde047', bgDark: '#eab308', textColor: '#713f12' },
+    { bgLight: '#6ee7b7', bgDark: '#10b981', textColor: '#064e3b' },
+    { bgLight: '#93c5fd', bgDark: '#3b82f6', textColor: '#1e3a8a' },
+    { bgLight: '#f472b6', bgDark: '#ec4899', textColor: '#831843' },
+    { bgLight: '#c084fc', bgDark: '#a855f7', textColor: '#581c87' }
+];
+
+// 游戏控制器
+class GameApp {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.wrapper = document.getElementById('canvas-wrapper');
+
+        this.audio = new AudioController();
+        
+        this.currentLevelIndex = 0;
+        this.stars = 0;
+        this.combo = 0;
+        this.bubbles = [];
+        this.particles = [];
+        this.animFrameId = null;
+        this.isGameStarted = false;
+
+        this.initUI();
+        this.bindEvents();
+        this.resizeCanvas();
+        this.loadLevel(this.currentLevelIndex);
+        this.startLoop();
+    }
+
+    initUI() {
+        this.levelDisplay = document.getElementById('level-display');
+        this.starsDisplay = document.getElementById('stars-display');
+        this.comboBadge = document.getElementById('combo-badge');
+        this.targetWordDisplay = document.getElementById('target-word');
+        this.feedbackOverlay = document.getElementById('feedback');
+        this.feedbackIcon = document.getElementById('feedback-icon');
+        this.feedbackText = document.getElementById('feedback-text');
+        this.victoryModal = document.getElementById('victory-modal');
+        this.settingsModal = document.getElementById('settings-modal');
+        this.settingsCard = document.getElementById('settings-card');
+        this.startModal = document.getElementById('start-modal');
+        this.startGameBtn = document.getElementById('start-game-btn');
+    }
+
+    bindEvents() {
+        window.addEventListener('resize', () => {
+            this.resizeCanvas();
+        });
+
+        // 首次点击开始游戏引导（解锁 iOS / Android 移动端发音）
+        this.startGameBtn.addEventListener('click', () => {
+            this.audio.unlockAudio();
+            this.startModal.classList.remove('active');
+            this.isGameStarted = true;
+            this.speakTargetPrompt();
+        });
+
+        const handleInteraction = (e) => {
+            e.preventDefault();
+            
+            // 全局触摸触发解锁
+            if (!this.audio.unlocked) {
+                this.audio.unlockAudio();
+            }
+
+            const rect = this.canvas.getBoundingClientRect();
+            let clickX, clickY;
+
+            if (e.touches && e.touches.length > 0) {
+                clickX = e.touches[0].clientX - rect.left;
+                clickY = e.touches[0].clientY - rect.top;
+            } else {
+                clickX = e.clientX - rect.left;
+                clickY = e.clientY - rect.top;
+            }
+
+            this.onCanvasClick(clickX, clickY);
+        };
+
+        this.canvas.addEventListener('mousedown', handleInteraction);
+        this.canvas.addEventListener('touchstart', handleInteraction, { passive: false });
+
+        // 朗读当前目标
+        document.getElementById('read-target-btn').addEventListener('click', () => {
+            if (this.currentTarget) {
+                this.speakTargetPrompt();
+            }
+        });
+
+        // 兼容多平台移动端全屏请求
+        document.getElementById('fullscreen-toggle-btn').addEventListener('click', () => {
+            const doc = document.documentElement;
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                if (doc.requestFullscreen) {
+                    doc.requestFullscreen().catch(err => console.log(err));
+                } else if (doc.webkitRequestFullscreen) {
+                    doc.webkitRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
+        });
+
+        // 设置面板触发
+        document.getElementById('open-settings-btn').addEventListener('click', () => {
+            this.syncSettingsToUI();
+            this.settingsModal.classList.add('active');
+        });
+
+        const closeSettings = () => {
+            this.settingsModal.classList.remove('active');
+        };
+
+        document.getElementById('close-settings-x').addEventListener('click', closeSettings);
+
+        this.settingsModal.addEventListener('click', (e) => {
+            if (e.target === this.settingsModal) {
+                closeSettings();
+            }
+        });
+
+        const setupOptionGroup = (groupId, settingKey) => {
+            const container = document.getElementById(groupId);
+            container.querySelectorAll('.option-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    container.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                });
+            });
+        };
+
+        setupOptionGroup('age-options', 'age');
+        setupOptionGroup('bank-options', 'bank');
+        setupOptionGroup('mode-options', 'mode');
+        setupOptionGroup('speed-options', 'speed');
+        setupOptionGroup('avatar-options', 'avatar');
+
+        // 保存设置并重新应用
+        document.getElementById('save-settings-btn').addEventListener('click', () => {
+            gameSettings.age = document.querySelector('#age-options .selected').dataset.value;
+            gameSettings.bank = document.querySelector('#bank-options .selected').dataset.value;
+            gameSettings.mode = document.querySelector('#mode-options .selected').dataset.value;
+            gameSettings.speed = document.querySelector('#speed-options .selected').dataset.value;
+            gameSettings.avatar = document.querySelector('#avatar-options .selected').dataset.value;
+
+            this.settingsModal.classList.remove('active');
+            this.loadLevel(this.currentLevelIndex);
+        });
+
+        // 下一关按钮
+        document.getElementById('next-level-btn').addEventListener('click', () => {
+            this.victoryModal.classList.remove('active');
+            this.currentLevelIndex++;
+            this.loadLevel(this.currentLevelIndex);
+        });
+    }
+
+    speakTargetPrompt() {
+        if (this.currentTarget) {
+            this.audio.speak(`请找到：${this.currentTarget}`);
+        }
+    }
+
+    syncSettingsToUI() {
+        const updateGroupSelected = (groupId, val) => {
+            const container = document.getElementById(groupId);
+            container.querySelectorAll('.option-btn').forEach(btn => {
+                if (btn.dataset.value === val) {
+                    btn.classList.add('selected');
+                } else {
+                    btn.classList.remove('selected');
+                }
+            });
+        };
+        updateGroupSelected('age-options', gameSettings.age);
+        updateGroupSelected('bank-options', gameSettings.bank);
+        updateGroupSelected('mode-options', gameSettings.mode);
+        updateGroupSelected('speed-options', gameSettings.speed);
+        updateGroupSelected('avatar-options', gameSettings.avatar);
+    }
+
+    resizeCanvas() {
+        this.width = this.wrapper.clientWidth;
+        this.height = this.wrapper.clientHeight;
+        
+        const dpr = window.devicePixelRatio || 1;
+        this.canvas.width = this.width * dpr;
+        this.canvas.height = this.height * dpr;
+        this.ctx.scale(dpr, dpr);
+    }
+
+    getWordPool() {
+        let singleCharPool = [];
+        let phrasePool = [];
+
+        if (gameSettings.age === 'under5') {
+            singleCharPool = [...UNDER_5_CHARACTERS];
+            phrasePool = ["太阳", "月亮", "白云", "花草", "小鸟", "游鱼", "爸爸", "妈妈"];
+        } else {
+            if (gameSettings.bank === 'dizigui') {
+                singleCharPool = [...DIZIGUI_CHARACTERS];
+                phrasePool = [...DIZIGUI_PHRASES];
+            } else if (gameSettings.bank === 'sanzijing') {
+                singleCharPool = [...DIZIGUI_CHARACTERS, ...SANZIJING_CHARACTERS];
+                phrasePool = [...DIZIGUI_PHRASES, ...SANZIJING_PHRASES];
+            } else {
+                singleCharPool = [...PRIMARY_GRADE2_CHARACTERS, ...DIZIGUI_CHARACTERS];
+                phrasePool = [...PRIMARY_GRADE2_PHRASES, ...DIZIGUI_PHRASES];
+            }
+        }
+
+        singleCharPool = Array.from(new Set(singleCharPool));
+        phrasePool = Array.from(new Set(phrasePool));
+
+        return { singleCharPool, phrasePool };
+    }
+
+    calculateMaxBubblesCap() {
+        const area = this.width * this.height;
+        let maxCap = Math.floor(area / 18000); 
+        maxCap = Math.max(8, Math.min(maxCap, 20));
+
+        if (gameSettings.age === 'under5') {
+            maxCap = Math.max(6, Math.floor(maxCap * 0.75));
+        }
+
+        return maxCap;
+    }
+
+    loadLevel(levelIndex) {
+        const levelNum = levelIndex + 1;
+        this.levelDisplay.innerText = `关卡 ${levelNum}`;
+
+        const { singleCharPool, phrasePool } = this.getWordPool();
+        
+        const maxCap = this.calculateMaxBubblesCap();
+        const bubbleCount = Math.min(5 + Math.floor(levelIndex * 0.7), maxCap);
+
+        let usePhrase = false;
+        if (gameSettings.mode === 'phrase') {
+            usePhrase = true;
+        } else if (gameSettings.mode === 'single') {
+            usePhrase = false;
+        } else {
+            usePhrase = (levelNum >= 3 && Math.random() > 0.4);
+        }
+
+        const activePool = (usePhrase && phrasePool.length > 0) ? phrasePool : singleCharPool;
+
+        const targetIdx = Math.floor(Math.random() * activePool.length);
+        this.currentTarget = activePool[targetIdx];
+        this.targetWordDisplay.innerText = this.currentTarget;
+
+        // 如果用户已经点击开始过游戏，载入新关卡时立刻朗读
+        if (this.isGameStarted) {
+            setTimeout(() => {
+                this.speakTargetPrompt();
+            }, 300);
+        }
+
+        const allTexts = [this.currentTarget];
+        const distractorsPool = activePool.filter(item => item !== this.currentTarget);
+        
+        while (allTexts.length < bubbleCount && distractorsPool.length > 0) {
+            const rIdx = Math.floor(Math.random() * distractorsPool.length);
+            allTexts.push(distractorsPool.splice(rIdx, 1)[0]);
+        }
+
+        allTexts.sort(() => Math.random() - 0.5);
+
+        const area = this.width * this.height;
+        let baseRadius = Math.sqrt(area / (bubbleCount * 4.2));
+        baseRadius = Math.max(32, Math.min(baseRadius, 58));
+
+        const speedMultiplier = SPEED_MULTIPLIERS[gameSettings.speed] || 2.8;
+
+        this.bubbles = [];
+        this.particles = [];
+        for (let i = 0; i < allTexts.length; i++) {
+            const text = allTexts[i];
+            const isTarget = (text === this.currentTarget);
+            const colorScheme = BUBBLE_COLORS[i % BUBBLE_COLORS.length];
+            const animalType = ANIMAL_TYPES[i % ANIMAL_TYPES.length];
+
+            let x, y, overlapping;
+            let attempts = 0;
+
+            do {
+                overlapping = false;
+                x = baseRadius + Math.random() * (this.width - baseRadius * 2);
+                y = baseRadius + Math.random() * (this.height - baseRadius * 2);
+
+                for (let b of this.bubbles) {
+                    const dist = Math.hypot(b.x - x, b.y - y);
+                    if (dist < baseRadius * 2 + 8) {
+                        overlapping = true;
+                        break;
+                    }
+                }
+                attempts++;
+            } while (overlapping && attempts < 80);
+
+            this.bubbles.push(new Bubble(x, y, baseRadius, text, isTarget, colorScheme, speedMultiplier, animalType));
+        }
+    }
+
+    onCanvasClick(px, py) {
+        for (let i = this.bubbles.length - 1; i >= 0; i--) {
+            const bubble = this.bubbles[i];
+            if (bubble.isPointInside(px, py)) {
+                bubble.scale = 0.8;
+                bubble.targetScale = 1;
+                bubble.smileTimer = 40;
+
+                if (bubble.isTarget) {
+                    this.audio.playSFX('correct');
+                    this.audio.speak(bubble.text, 0.85, () => {
+                        if (Math.random() > 0.4) {
+                            const praise = PRAISE_WORDS[Math.floor(Math.random() * PRAISE_WORDS.length)];
+                            this.audio.speak(praise, 1.0);
+                        } else {
+                            this.audio.playSFX('cheer');
+                        }
+                    });
+                    this.handleCorrectSelection(bubble);
+                } else {
+                    this.audio.speak(bubble.text);
+                    this.handleWrongSelection();
+                }
+                break;
+            }
+        }
+    }
+
+    spawnConfetti(x, y) {
+        for (let i = 0; i < 40; i++) {
+            this.particles.push(new Particle(x, y));
+        }
+    }
+
+    handleCorrectSelection(bubble) {
+        this.combo++;
+        const extraBonus = (this.combo > 1) ? this.combo * 5 : 0;
+        this.stars += (10 + extraBonus);
+        this.starsDisplay.innerText = this.stars;
+
+        this.spawnConfetti(bubble.x, bubble.y);
+
+        if (this.combo > 1) {
+            this.comboBadge.innerText = `🔥 Combo x${this.combo}`;
+            this.comboBadge.classList.add('active');
+        }
+
+        const praiseText = this.combo > 1 ? `太棒啦! x${this.combo}` : '回答正确！';
+        this.showFeedback('🎉', praiseText, '#10b981');
+
+        this.bubbles = this.bubbles.filter(b => b !== bubble);
+
+        const remainingTargets = this.bubbles.filter(b => b.isTarget);
+        if (remainingTargets.length === 0) {
+            setTimeout(() => {
+                this.audio.playSFX('levelUp');
+                this.showVictoryModal();
+            }, 1800);
+        }
+    }
+
+    handleWrongSelection() {
+        this.combo = 0;
+        this.comboBadge.classList.remove('active');
+
+        this.audio.playSFX('wrong');
+        this.showFeedback('❌', '点错啦', '#ef4444');
+    }
+
+    showFeedback(icon, text, color) {
+        this.feedbackIcon.innerText = icon;
+        this.feedbackText.innerText = text;
+        this.feedbackText.style.color = color;
+        this.feedbackOverlay.classList.add('show');
+
+        setTimeout(() => {
+            this.feedbackOverlay.classList.remove('show');
+        }, 750);
+    }
+
+    showVictoryModal() {
+        document.getElementById('modal-title-text').innerText = `顺利通过 关卡 ${this.currentLevelIndex + 1}！`;
+        document.getElementById('modal-desc-text').innerText = `太棒了！你学会了“${this.currentTarget}”！`;
+        this.victoryModal.classList.add('active');
+    }
+
+    handleCollisions() {
+        for (let i = 0; i < this.bubbles.length; i++) {
+            for (let j = i + 1; j < this.bubbles.length; j++) {
+                const b1 = this.bubbles[i];
+                const b2 = this.bubbles[j];
+
+                const dx = b2.x - b1.x;
+                const dy = b2.y - b1.y;
+                const distance = Math.hypot(dx, dy);
+                const minDist = b1.radius + b2.radius;
+
+                if (distance < minDist) {
+                    const overlap = minDist - distance;
+                    const nx = dx / (distance || 1);
+                    const ny = dy / (distance || 1);
+
+                    b1.x -= nx * overlap * 0.5;
+                    b1.y -= ny * overlap * 0.5;
+                    b2.x += nx * overlap * 0.5;
+                    b2.y += ny * overlap * 0.5;
+
+                    const kx = b1.vx - b2.vx;
+                    const ky = b1.vy - b2.vy;
+                    const p = 2 * (nx * kx + ny * ky) / (b1.mass + b2.mass);
+
+                    b1.vx -= p * b2.mass * nx;
+                    b1.vy -= p * b2.mass * ny;
+                    b2.vx += p * b1.mass * nx;
+                    b2.vy += p * b1.mass * ny;
+                }
+            }
+        }
+    }
+
+    startLoop() {
+        const render = () => {
+            this.ctx.clearRect(0, 0, this.width, this.height);
+
+            this.handleCollisions();
+
+            for (let bubble of this.bubbles) {
+                bubble.update(this.width, this.height);
+                bubble.draw(this.ctx);
+            }
+
+            for (let i = this.particles.length - 1; i >= 0; i--) {
+                const p = this.particles[i];
+                p.update();
+                p.draw(this.ctx);
+                if (p.alpha <= 0) {
+                    this.particles.splice(i, 1);
+                }
+            }
+
+            this.animFrameId = requestAnimationFrame(render);
+        };
+        render();
+    }
+}
+
+window.onload = () => {
+    new GameApp();
+};
+</script>
+</body>
+</html>
