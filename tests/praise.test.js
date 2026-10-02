@@ -190,6 +190,8 @@ function loadPrefetchLevel() {
   const ctx = vm.createContext({
     window: { requestIdleCallback: null },
     Praise: { SPOKEN: ['对啦', '真棒'] },
+    Prompt: { say: () => '' }, // no round target in this harness, so nothing to warm
+    G: null,
     Voice: {
       engine: 'auto',
       prefetch: (items) => calls.push(Array.from(items)),

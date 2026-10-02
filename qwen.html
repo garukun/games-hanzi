@@ -879,6 +879,11 @@ function prefetchLevel(cfg){
   // The six spoken praises are reused by every level, so warm them once alongside the
   // vocabulary — after that the cache hit makes the reward instant with no extra requests.
   for(const p of Praise.SPOKEN)items.push(p);
+  // Warm this round's spoken instruction, and only this round's: the whole point of the
+  // vocabulary sweep above is that every target the child will hear is already cached, so
+  // adding an instruction per pooled word would double the requests for a level's worth of
+  // strings nobody is going to hear yet. One extra clip up front buys an instant first prompt.
+  const instr=Prompt.say(G&&G.rt); if(instr)items.push(instr);
   if(!items.length)return;
   if(Voice.engine==='local')return;
   const warm=()=>Voice.prefetch(items);
@@ -967,6 +972,34 @@ const Praise=(()=>{
   return {SPOKEN, spoken};
 })();
 /* ==== PRAISE END ==== */
+
+/* ==== PROMPT START ==== */
+/* gemini.html spoke the *task*, not just the noun — 请找到：太阳 (gemini.html:1105) — because the
+ * game is for children who cannot read the prompt card it shows them. qwen read out a bare
+ * character, or worse a bare half-couplet, which tells a pre-reader nothing about what to do.
+ * This module owns the spoken instruction.
+ *
+ * gemini used one template for every question type, which is wrong here: on a phrase level the
+ * target half is *deliberately not* on screen — the child has to supply what follows. Telling
+ * them 请找到 would send them hunting for a bubble that cannot exist. So one template per type.
+ * Trailing punctuation rides along because both neural endpoints pause on it, which is what makes
+ * the clause break sound intentional rather than run together. */
+const Prompt=(()=>{
+  const FIND='请找到：';        // char/word — the answer is on screen, spoken exactly as asked
+  const LISTEN='请听好，';      // phrase — only the opening half of the couplet is given
+  const NEXT='，下一句是什么？';
+  /** The full spoken instruction for a round target, or '' if there is nothing to say. */
+  function say(rt){
+    if(!rt)return '';
+    const t=rt.type==='phrase'?rt.a:rt.text;
+    if(typeof t!=='string')return '';   // vocabulary is always a string; never coerce junk into a URL
+    const s=t.replace(/[\r\n]+/g,' ').trim();
+    if(!s)return '';
+    return rt.type==='phrase' ? LISTEN+s+NEXT : FIND+s;
+  }
+  return {FIND,LISTEN,NEXT,say};
+})();
+/* ==== PROMPT END ==== */
 
 /* ============ GAME ENGINE ============ */
 let G=null; // game state
@@ -1065,7 +1098,8 @@ function nextRound(){
 }
 
 function speakTarget(){
-  const rt=G.rt; const txt=rt.type==='phrase'?rt.a:rt.text;
+  const txt=Prompt.say(G.rt);
+  if(!txt)return;
   setSpeaking(true); Voice.speak(txt,{onend:()=>setSpeaking(false)});
   if(!Voice.on)setTimeout(()=>setSpeaking(false),900);
 }
