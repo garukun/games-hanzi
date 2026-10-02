@@ -399,6 +399,10 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
 .helpRow p{margin:0;font-weight:700;font-size:14px;line-height:1.4;}
 .helpNote{background:#fff6d8;border:2px dashed var(--amber);border-radius:14px;padding:8px 12px;font-size:12px;font-weight:700;color:#a06a10;margin:12px 0;}
 .setRow{display:flex;align-items:center;gap:10px;margin:10px 0;}
+/* [hidden] is a UA display:none at specificity (0,1,0) and `.setRow{display:flex}` is an
+   author rule at the same weight, so the author wins and the row would stay drawn on a
+   device with no Fullscreen API — the same trap .mapFoot documents. Name the rule. */
+.setRow[hidden]{display:none;}
 .setLab{font-family:var(--disp);font-size:17px;color:var(--ink);min-width:76px;}
 .segs{display:flex;gap:6px;flex:1;}
 .seg{flex:1;font-family:var(--disp);font-size:15px;padding:6px 4px;border:3px solid var(--ink);border-radius:999px;
@@ -640,8 +644,12 @@ button{font-family:inherit;border:none;background:none;cursor:pointer;color:inhe
     <div class="setRow"><span class="setLab">🐻 泡泡脸</span><div class="segs" id="optFaces">
       <button class="seg" data-v="on">开</button><button class="seg" data-v="off">关</button>
     </div></div>
+    <div class="setRow" id="fsRow" hidden><span class="setLab">⛶ 全屏</span><div class="segs" id="optFull">
+      <button class="seg" data-v="on">全屏</button><button class="seg" data-v="off">普通</button>
+    </div></div>
     <div class="helpNote"> 发音默认走「自动」：先尝试普通话神经网络人声，读不准时自动改用系统语音。
       给小朋友玩时，请打开设备声音，并允许网页朗读语音。泡泡速度可以按孩子的反应调慢一点。
+      安卓和电脑上可以切到<b>全屏</b>，把浏览器地址栏收起来，泡泡就变大了。
       游戏里点题目右边的 <b>⚙️</b> 随时可以回到这里改，泡泡会先停下来等你们。</div>
     <button class="btn3d teal" id="btnHelpOk" style="width:100%">知道啦！</button>
   </div>
@@ -1235,6 +1243,68 @@ const Help=(()=>{
 })();
 /* ==== HELP END ==== */
 
+/* ==== FULLSCREEN START ==== */
+/* The port of gemini.html's ⛶ 全屏 toggle (gemini.html:1033-1050). On a phone the browser's
+   address bar is 60-90px of the board, so handing it back is the single cheapest play-area
+   win available — and it takes the address bar away from a five-year-old mid-level.
+   Two things gemini got wrong, both of which matter more on the devices this game is for:
+   it drew the button unconditionally and its handler then did nothing on a device without
+   the Fullscreen API (every iPhone and iPad — exactly where this game is most likely to be
+   played), and its label stayed "⛶ 全屏" forever, including while fullscreen. `supported()`
+   gates the control so a dead button is never drawn, and `watch()` re-reads the real state
+   from `fullscreenchange`, so a fullscreen the child left by swiping or Escape is reflected
+   instead of the app believing it is still fullscreen. Declared before the settings UI below
+   because syncToggles() reads it. */
+const Fullscreen=(()=>{
+  let onChange=null, watched=false;
+  /* Every vendor spelling this has ever shipped under. `node()` reads the current element,
+     `request()`/`cancel()` find the two methods — read live, never cached into locals at
+     load, so a host that patches the API after the page is running is still honoured. */
+  function node(){ const d=document;
+    return d.fullscreenElement||d.webkitFullscreenElement||d.mozFullScreenElement||d.msFullscreenElement||null; }
+  function request(){ const e=document.documentElement;
+    return e.requestFullscreen||e.webkitRequestFullscreen||e.webkitRequestFullScreen||e.mozRequestFullScreen||e.msRequestFullscreen||null; }
+  function cancel(){ const d=document;
+    return d.exitFullscreen||d.webkitExitFullscreen||d.mozCancelFullScreen||d.msExitFullscreen||null; }
+  /** Is the device actually able to do this? Queried, never cached: a control that cannot
+      work must not be drawn, and this is the whole difference from gemini's unconditional
+      button. */
+  function supported(){ return typeof request()==='function'; }
+  function on(){ return !!node(); }
+  /* Every failure is swallowed. A fullscreen request is refused for reasons outside the
+     child's control (embedded without allow="fullscreen", a document not yet activated, a
+     transient user-gesture loss), and gemini's `.catch(err=>console.log(err))` turns a
+     normal, expected outcome into console noise — while the prefixed branches there call
+     `.catch` on a possibly-undefined return value. Returns whether a request was made, so
+     a caller can leave the UI alone when nothing happened. */
+  function call(fn,recv){
+    let p; try{ p=fn.call(recv); }catch(e){ return false; }
+    if(p&&typeof p.catch==='function')p.catch(()=>{});
+    return true;
+  }
+  function enter(){ const fn=request(); return fn?call(fn,document.documentElement):false; }
+  function exit(){ const fn=cancel();  return fn?call(fn,document):false; }
+  /* No separate support gate here: enter() and exit() already answer false when the matching
+     API is missing, and a redundant branch would be one more thing that can disagree. */
+  function toggle(){ return on()?exit():enter(); }
+  /** Report every real change to `fn`. Idempotent — attaching twice must not double-fire,
+      because Help.open() re-syncs the segmented control and a second listener would make
+      the label flap. */
+  function watch(fn){
+    onChange=typeof fn==='function'?fn:null;
+    if(watched)return fire();
+    watched=true;
+    document.addEventListener('fullscreenchange',fire);
+    document.addEventListener('webkitfullscreenchange',fire);
+    document.addEventListener('mozfullscreenchange',fire);
+    document.addEventListener('MSFullscreenChange',fire);
+    return fire();
+  }
+  function fire(){ const v=on(); if(onChange)onChange(v); return v; }
+  return {supported,on,enter,exit,toggle,watch};
+})();
+/* ==== FULLSCREEN END ==== */
+
 /* ============ SETTINGS UI ============ */
 function syncToggles(){ $('#tglSfx').classList.toggle('off',!Store.sfx); $('#tglVoice').classList.toggle('off',!Store.voice);
   $('#tglSfx').querySelector('.ic').textContent=Store.sfx?'🔊':'🔇'; $('#tglVoice').querySelector('.ic').textContent=Store.voice?'🗣️':'🔕';
@@ -1245,12 +1315,28 @@ function syncToggles(){ $('#tglSfx').classList.toggle('off',!Store.sfx); $('#tgl
   $$('#optEngine .seg').forEach(b=>b.classList.toggle('on',b.dataset.v===Store.engine));
   $$('#optSpeed .seg').forEach(b=>b.classList.toggle('on',b.dataset.v===Store.speed));
   $$('#optFaces .seg').forEach(b=>b.classList.toggle('on',b.dataset.v===Store.faces));
-  $$('#optPace .seg').forEach(b=>b.classList.toggle('on',b.dataset.v===Store.pace)); }
+  $$('#optPace .seg').forEach(b=>b.classList.toggle('on',b.dataset.v===Store.pace));
+  $$('#optFull .seg').forEach(b=>b.classList.toggle('on',(b.dataset.v==='on')===Fullscreen.on())); }
 function wireSeg(id,get,set){ $$(id+' .seg').forEach(b=>{ b.onclick=()=>{ SFX.click(); set(b.dataset.v); syncToggles(); }; }); }
 wireSeg('#optEngine',()=>Store.engine,v=>Store.setEngine(v));
 wireSeg('#optSpeed',()=>Store.speed,v=>Store.setSpeed(v));
 wireSeg('#optFaces',()=>Store.faces,v=>Store.setFaces(v));
 wireSeg('#optPace',()=>Store.pace,v=>Store.setPace(v));
+/* 全屏 is a two-state row like every other one, and it is wired by hand rather than through
+   wireSeg because it is not a stored preference: browsers refuse to re-enter fullscreen
+   without a fresh user gesture, so a remembered value could not be honoured anyway and would
+   only ever show a lie. `if(Fullscreen.on()===want)return` stops a refused request from
+   being retried forever, and syncToggles() is *not* called on the way in because the
+   `fullscreenchange` event is the authority on whether it worked — the row updates itself. */
+$$('#optFull .seg').forEach(b=>{ b.onclick=()=>{ SFX.click();
+  const want=b.dataset.v==='on'; if(Fullscreen.on()===want)return; Fullscreen.toggle(); }; });
+/* The row is hidden, not disabled, where the API is missing: a five-year-old tapping a
+   control that cannot work is worse than not being offered it. gemini.html drew this button
+   on every device including the iPads where its own handler was a no-op. */
+$('#fsRow').hidden=!Fullscreen.supported();
+/* Re-read the real state on every change, so a fullscreen the child left with Escape or a
+   swipe puts the row back on 普通 instead of the app believing it is still fullscreen. */
+Fullscreen.watch(()=>{ $$('#optFull .seg').forEach(b=>b.classList.toggle('on',(b.dataset.v==='on')===Fullscreen.on())); });
 $('#tglSfx').onclick=()=>{ Store.setSfx(!Store.sfx); if(Store.sfx){SFX.ensure();SFX.click();} syncToggles(); };
 $('#tglVoice').onclick=()=>{ Store.setVoice(!Store.voice); if(Store.voice){Voice.prime();Voice.speak('语音已打开');} syncToggles(); };
 $('#btnMute').onclick=()=>{ const anyOn=Store.sfx||Store.voice; Store.setSfx(!anyOn); Store.setVoice(!anyOn);
