@@ -2,14 +2,19 @@
 /**
  * Build the offline asset pack used by the print tool (printer/).
  *
- *   node printer/scripts/print-assets.mjs            # everything
- *   node printer/scripts/print-assets.mjs hanzi      # stroke/radical shards (Make Me a Hanzi)
- *   node printer/scripts/print-assets.mjs emoji      # Fluent Emoji (Flat) + illustration map + catalog
- *   node printer/scripts/print-assets.mjs font       # LXGW WenKai subset (needs python3 fonttools+brotli)
+ *   node printer/scripts/print-assets.mjs                    # everything (compact)
+ *   node printer/scripts/print-assets.mjs strokes            # 2-tier stroke/median bundles (Make Me a Hanzi)
+ *   node printer/scripts/print-assets.mjs strokes --pretty   # formatted JSON for dev inspection
+ *   node printer/scripts/print-assets.mjs emoji              # Fluent Emoji (Flat) + illustration map + catalog
+ *   node printer/scripts/print-assets.mjs font               # LXGW WenKai subset (needs python3 fonttools+brotli)
  *
  * Network downloads are cached in printer/scripts/.cache so re-runs are cheap.
- * Outputs (all committed): printer/assets/hanzi/*.json, printer/assets/emoji/*.svg,
- * printer/assets/fonts/*.woff2, printer/data/illustrations.json, printer/data/emoji-catalog.json
+ * Outputs (all committed):
+ *   - printer/assets/strokes/hanzi-strokes-core-1000.json        (Tier 1: built-in 1,000 curriculum chars)
+ *   - printer/assets/strokes/hanzi-strokes-extended-gb2312.json  (Tier 2: remaining 2,757 GB2312 Level-1 chars)
+ *   - printer/assets/emoji/*.svg
+ *   - printer/assets/fonts/*.woff2
+ *   - printer/data/illustrations.json, printer/data/emoji-catalog.json
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -86,13 +91,98 @@ const stripVS = (s) => s.replace(/\uFE0F/g, '');
 
 /* ------------------------------------------------------------------ hanzi */
 
-async function buildHanzi() {
-  console.log('[hanzi] downloading Make Me a Hanzi data…');
+export function cleanStrokeMedians(pts) {
+  if (!Array.isArray(pts) || pts.length <= 2) return pts || [];
+  const p = pts.map(([x, y]) => [Number(x), Number(y)]);
+
+  for (let pass = 0; pass < 2 && p.length >= 3; pass++) {
+    const dx0 = p[1][0] - p[0][0];
+    const dy0 = p[1][1] - p[0][1];
+    const l0 = Math.hypot(dx0, dy0);
+    let refIdx = 2;
+    while (refIdx < p.length - 1 && Math.hypot(p[refIdx][0] - p[1][0], p[refIdx][1] - p[1][1]) < 80) {
+      refIdx++;
+    }
+    const dxRef = p[refIdx][0] - p[1][0];
+    const dyRef = p[refIdx][1] - p[1][1];
+    const lRef = Math.hypot(dxRef, dyRef);
+    if (l0 < 85 && lRef > l0 * 1.2 && l0 > 0 && lRef > 0) {
+      const cos = (dx0 * dxRef + dy0 * dyRef) / (l0 * lRef);
+      if (cos < 0.96) {
+        const ux = dxRef / lRef;
+        const uy = dyRef / lRef;
+        const along = Math.max(0, dx0 * ux + dy0 * uy);
+        p[1] = [p[1][0] - ux * along * 0.45, p[1][1] - uy * along * 0.45];
+        p.shift();
+      }
+    }
+  }
+
+  for (let pass = 0; pass < 2 && p.length >= 3; pass++) {
+    const n = p.length;
+    const dx0 = p[n - 1][0] - p[n - 2][0];
+    const dy0 = p[n - 1][1] - p[n - 2][1];
+    const l0 = Math.hypot(dx0, dy0);
+    let refIdx = n - 3;
+    while (refIdx > 0 && Math.hypot(p[n - 2][0] - p[refIdx][0], p[n - 2][1] - p[refIdx][1]) < 80) {
+      refIdx--;
+    }
+    const dxRef = p[n - 2][0] - p[refIdx][0];
+    const dyRef = p[n - 2][1] - p[refIdx][1];
+    const lRef = Math.hypot(dxRef, dyRef);
+    if (l0 < 95 && lRef > l0 * 1.25 && l0 > 0 && lRef > 0) {
+      const cos = (dx0 * dxRef + dy0 * dyRef) / (l0 * lRef);
+      if (cos > 0.55 && cos < 0.96) {
+        const ux = dxRef / lRef;
+        const uy = dyRef / lRef;
+        const along = Math.max(0, dx0 * ux + dy0 * uy);
+        p[n - 2] = [p[n - 2][0] + ux * along * 0.45, p[n - 2][1] + uy * along * 0.45];
+        p.pop();
+      }
+    }
+  }
+  return p;
+}
+
+export function smoothMedianToPath(pts) {
+  const p = cleanStrokeMedians(pts);
+  if (!p || !p.length) return '';
+  if (p.length === 1) return `M ${Math.round(p[0][0])} ${Math.round(p[0][1])}`;
+  if (p.length === 2) {
+    return `M ${Math.round(p[0][0])} ${Math.round(p[0][1])} L ${Math.round(p[1][0])} ${Math.round(p[1][1])}`;
+  }
+  let d = `M ${Math.round(p[0][0])} ${Math.round(p[0][1])}`;
+  for (let i = 1; i < p.length - 1; i++) {
+    const vx1 = p[i][0] - p[i - 1][0];
+    const vy1 = p[i][1] - p[i - 1][1];
+    const vx2 = p[i + 1][0] - p[i][0];
+    const vy2 = p[i + 1][1] - p[i][1];
+    const l1 = Math.hypot(vx1, vy1) || 1;
+    const l2 = Math.hypot(vx2, vy2) || 1;
+    const cos = (vx1 * vx2 + vy1 * vy2) / (l1 * l2);
+    if (cos < 0.65) {
+      d += ` L ${Math.round(p[i][0])} ${Math.round(p[i][1])}`;
+    } else {
+      const mx = Math.round((p[i][0] + p[i + 1][0]) / 2);
+      const my = Math.round((p[i][1] + p[i + 1][1]) / 2);
+      d += ` Q ${Math.round(p[i][0])} ${Math.round(p[i][1])} ${mx} ${my}`;
+    }
+  }
+  d += ` L ${Math.round(p[p.length - 1][0])} ${Math.round(p[p.length - 1][1])}`;
+  return d;
+}
+
+async function buildHanzi({ pretty = false } = {}) {
+  console.log('[strokes] loading Make Me a Hanzi data…');
   const base = 'https://raw.githubusercontent.com/skishore/makemeahanzi/master/';
   const gfx = await download(base + 'graphics.txt', join(CACHE, 'graphics.txt'));
   const dict = await download(base + 'dictionary.txt', join(CACHE, 'dictionary.txt'));
 
-  const wanted = new Set([...v5Chars(), ...gb2312Level1()]);
+  const coreCharList = v5Chars();
+  const coreSet = new Set(coreCharList);
+  const gbList = gb2312Level1();
+  const wanted = new Set([...coreCharList, ...gbList]);
+
   const radicals = new Map();
   for (const line of dict.split('\n')) {
     if (!line.trim()) continue;
@@ -100,32 +190,55 @@ async function buildHanzi() {
     if (wanted.has(d.character)) radicals.set(d.character, d.radical || '');
   }
 
-  const shards = new Map();
-  const found = new Set();
+  const entriesByChar = new Map();
   for (const line of gfx.split('\n')) {
     if (!line.trim()) continue;
     const g = JSON.parse(line);
     if (!wanted.has(g.character)) continue;
-    found.add(g.character);
-    const cp = g.character.codePointAt(0);
-    const key = shardKey(cp);
-    if (!shards.has(key)) shards.set(key, {});
-    shards.get(key)[g.character] = { s: g.strokes, r: radicals.get(g.character) || '', n: g.strokes.length };
+    const m = Array.isArray(g.medians) ? g.medians.map(smoothMedianToPath).filter(Boolean) : undefined;
+    entriesByChar.set(g.character, {
+      s: g.strokes,
+      ...(m && m.length > 0 ? { m } : {}),
+      r: radicals.get(g.character) || '',
+      n: g.strokes.length,
+    });
   }
 
-  const dir = join(OUT, 'assets', 'hanzi');
+  // Order Tier 1 (core-1000) in curriculum order and Tier 2 (extended-gb2312) in GB2312 order
+  const coreBundle = {};
+  for (const ch of coreCharList) {
+    if (entriesByChar.has(ch)) coreBundle[ch] = entriesByChar.get(ch);
+  }
+  const extendedBundle = {};
+  for (const ch of gbList) {
+    if (!coreSet.has(ch) && entriesByChar.has(ch)) {
+      extendedBundle[ch] = entriesByChar.get(ch);
+    }
+  }
+
+  // Clean up legacy hex-shard directory if present
+  rmSync(join(OUT, 'assets', 'hanzi'), { recursive: true, force: true });
+
+  const dir = join(OUT, 'assets', 'strokes');
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
-  let bytes = 0;
-  for (const [key, data] of shards) {
-    const text = JSON.stringify(data);
-    bytes += text.length;
-    writeFileSync(join(dir, `${key}.json`), text);
-  }
-  const missing = v5Chars().filter((c) => !found.has(c));
-  console.log(`[hanzi] ${found.size}/${wanted.size} chars, ${shards.size} shards, ${(bytes / 1e6).toFixed(1)} MB`);
-  if (missing.length) console.warn('[hanzi] v5 characters missing stroke data:', missing.join(''));
-  writeFileSync(join(OUT, 'assets', 'hanzi', '_meta.json'), JSON.stringify({ shardBits: SHARD_BITS, count: found.size }));
+
+  const indent = pretty ? 2 : undefined;
+  const coreText = JSON.stringify(coreBundle, null, indent);
+  const extText = JSON.stringify(extendedBundle, null, indent);
+  const coreFile = join(dir, 'hanzi-strokes-core-1000.json');
+  const extFile = join(dir, 'hanzi-strokes-extended-gb2312.json');
+
+  writeFileSync(coreFile, coreText);
+  writeFileSync(extFile, extText);
+
+  const missing = coreCharList.filter((c) => !entriesByChar.has(c));
+  console.log(
+    `[strokes] built 2-tier bundles (${pretty ? 'pretty' : 'compact'}):\n` +
+      `  - hanzi-strokes-core-1000.json:       ${Object.keys(coreBundle).length} chars (${(coreText.length / 1e6).toFixed(2)} MB)\n` +
+      `  - hanzi-strokes-extended-gb2312.json: ${Object.keys(extendedBundle).length} chars (${(extText.length / 1e6).toFixed(2)} MB)`,
+  );
+  if (missing.length) console.warn('[strokes] curriculum characters missing stroke data:', missing.join(''));
 }
 
 /* ------------------------------------------------------------------ emoji */
@@ -292,7 +405,9 @@ async function buildFont() {
 
 /* ------------------------------------------------------------------- main */
 
-const which = process.argv[2] || 'all';
-if (which === 'all' || which === 'hanzi') await buildHanzi();
+const args = process.argv.slice(2);
+const prettyFlag = args.includes('--pretty');
+const which = args.find((a) => !a.startsWith('-')) || 'all';
+if (which === 'all' || which === 'strokes' || which === 'hanzi') await buildHanzi({ pretty: prettyFlag });
 if (which === 'all' || which === 'emoji') await buildEmoji();
 if (which === 'all' || which === 'font') await buildFont();

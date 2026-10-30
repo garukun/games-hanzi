@@ -204,17 +204,26 @@ async function initApp() {
 
   // 4. Sync toolbar controls with store.state.settings
   function syncToolbarFromState() {
-    const { perPage, rows, trace, mono, showFooterTitle, zoom } = store.state.settings;
-    const spec = SPECS[perPage] || SPECS[2];
+    const { perPage, cols, rows, trace, mono, showFooterTitle, zoom } = store.state.settings;
     const slot0 = unitSlots(perPage)[0];
-    const geom = unitGeometry(perPage, slot0, { rows: rows ?? undefined, trace: trace ?? undefined });
+    const geom = unitGeometry(perPage, slot0, {
+      cols: cols ?? undefined,
+      rows: rows ?? undefined,
+      trace: trace ?? undefined,
+    });
 
     for (const btn of document.querySelectorAll('[data-per-page]')) {
       btn.classList.toggle('is-active', Number(btn.dataset.perPage) === perPage);
     }
 
+    const colsInput = document.getElementById('setting-cols');
     const rowsInput = document.getElementById('setting-rows');
     const traceInput = document.getElementById('setting-trace');
+    if (colsInput) {
+      colsInput.min = String(geom.grid.minCols);
+      colsInput.max = String(geom.grid.maxCols);
+      colsInput.value = String(geom.grid.cols);
+    }
     if (rowsInput) {
       rowsInput.max = String(geom.grid.maxRows);
       rowsInput.value = String(geom.grid.rows);
@@ -279,6 +288,9 @@ async function initApp() {
     });
   }
 
+  document.getElementById('setting-cols')?.addEventListener('change', (e) => {
+    store.updateSettings({ cols: Number(e.target.value) });
+  });
   document.getElementById('setting-rows')?.addEventListener('change', (e) => {
     store.updateSettings({ rows: Number(e.target.value) });
   });

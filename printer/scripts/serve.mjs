@@ -9,6 +9,7 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 
@@ -29,6 +30,9 @@ const MIME = {
   '.txt': 'text/plain; charset=utf-8',
 };
 
+const COMPRESSIBLE_EXTS = new Set(['.json', '.js', '.mjs', '.css', '.html', '.svg', '.txt']);
+const gzipCache = new Map();
+
 export function startStaticServer({ port = 0, root = ROOT } = {}) {
   const server = createServer(async (req, res) => {
     try {
@@ -46,8 +50,30 @@ export function startStaticServer({ port = 0, root = ROOT } = {}) {
 
       const info = await stat(safePath);
       const target = info.isDirectory() ? join(safePath, 'index.html') : safePath;
-      const buf = await readFile(target);
+      const targetInfo = info.isDirectory() ? await stat(target) : info;
       const ext = extname(target).toLowerCase();
+      const acceptEncoding = String(req.headers['accept-encoding'] || '');
+      const canGzip = COMPRESSIBLE_EXTS.has(ext) && /\bgzip\b/i.test(acceptEncoding) && targetInfo.size > 1024;
+
+      if (canGzip) {
+        const cacheKey = `${target}:${targetInfo.mtimeMs}:${targetInfo.size}`;
+        let gzBuf = gzipCache.get(cacheKey);
+        if (!gzBuf) {
+          const rawBuf = await readFile(target);
+          gzBuf = gzipSync(rawBuf);
+          gzipCache.set(cacheKey, gzBuf);
+        }
+        res.writeHead(200, {
+          'Content-Type': MIME[ext] || 'application/octet-stream',
+          'Content-Encoding': 'gzip',
+          'Vary': 'Accept-Encoding',
+          'Cache-Control': 'no-cache',
+        });
+        res.end(gzBuf);
+        return;
+      }
+
+      const buf = await readFile(target);
       res.writeHead(200, {
         'Content-Type': MIME[ext] || 'application/octet-stream',
         'Cache-Control': 'no-cache',

@@ -74,3 +74,52 @@ test('print layout: paginate and pageCount', async () => {
   assert.equal(pages.length, 3);
   assert.deepEqual(pages[2], [8, 9]);
 });
+
+test('print layout: sparse large Tianzige defaults and adjustable cols/rows sizing', async () => {
+  const { PER_PAGE_OPTIONS, unitSlots, unitGeometry } = await import('../js/layout.js');
+  for (const k of PER_PAGE_OPTIONS) {
+    const slot = unitSlots(k)[0];
+    const defGeom = unitGeometry(k, slot);
+    // Default Tianzige cells are >= 21mm square with positive inter-cell and inter-row gaps
+    assert.ok(defGeom.grid.cell >= 21, `perPage=${k} default cell=${defGeom.grid.cell}mm should be >= 21mm`);
+    assert.ok(defGeom.grid.colGap >= 1.5, `perPage=${k} colGap=${defGeom.grid.colGap}mm should be >= 1.5mm`);
+    assert.ok(defGeom.grid.rowGap >= 1.8, `perPage=${k} rowGap=${defGeom.grid.rowGap}mm should be >= 1.8mm`);
+
+    // Decreasing cols makes each Tianzige square larger while fitting inside slot
+    const fewerCols = unitGeometry(k, slot, { cols: 3 });
+    assert.equal(fewerCols.grid.cols, 3);
+    assert.ok(fewerCols.grid.cell > defGeom.grid.cell, `cols=3 should produce larger cell than default for perPage=${k}`);
+    assert.ok(fewerCols.grid.y + fewerCols.grid.h <= slot.h + 0.05);
+    assert.ok(fewerCols.grid.x + fewerCols.grid.w <= slot.w + 0.05);
+  }
+});
+
+test('print layout: dashed light-grey tracing symbol uses smoothed median paths', async () => {
+  const { smoothMedianToPath } = await import('../js/hanzi-data.js');
+  const { renderCharUnitHtml } = await import('../js/render-sheet.js');
+  const { unitSlots } = await import('../js/layout.js');
+
+  const d = smoothMedianToPath([[121, 393], [193, 372], [417, 402], [827, 434], [920, 401]]);
+  assert.ok(d.startsWith('M ') && !d.includes('NaN'));
+
+  const html = renderCharUnitHtml(
+    {
+      char: '一',
+      index: 0,
+      pinyin: 'yī',
+      radical: '一',
+      strokes: 1,
+      strokePaths: ['M 100 400 L 900 400 L 900 450 L 100 450 Z'],
+      medianPaths: [d],
+      pickedWords: ['一个'],
+      illustration: { type: 'glyph' },
+    },
+    unitSlots(2)[0],
+    0,
+    0,
+    { perPage: 2 },
+  );
+  assert.ok(html.includes('class="trace-centerline"'), 'should render dashed centerline group in trace symbol');
+  assert.ok(html.includes('stroke-dasharray="28,54"'), 'trace symbol should use dashed stroke');
+  assert.ok(html.includes('data-trace-style="dashed"'), 'trace cells should mark dashed trace style');
+});

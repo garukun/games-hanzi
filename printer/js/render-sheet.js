@@ -34,6 +34,25 @@ function buildCharSymbol(symId, item) {
   return `<symbol id="${symId}" viewBox="0 0 1024 1024"><text x="512" y="800" text-anchor="middle" font-family="'LXGW WenKai','Kaiti SC',STKaiti,KaiTi,serif" font-size="820">${escapeHtml(item.char)}</text></symbol>`;
 }
 
+/** Build the light-grey dashed tracing `<symbol>` markup in 1024×1024 coordinate space. */
+function buildTraceSymbol(traceSymId, item) {
+  const hasStrokes = Array.isArray(item.strokePaths) && item.strokePaths.length > 0;
+  const hasMedians = Array.isArray(item.medianPaths) && item.medianPaths.length > 0;
+  if (hasMedians) {
+    const silhouette = hasStrokes
+      ? `<g class="trace-silhouette" fill="#e5e8ed">${item.strokePaths.map((d) => `<path d="${d}"/>`).join('')}</g>`
+      : '';
+    const mPaths = item.medianPaths.map((d) => `<path d="${d}"/>`).join('');
+    const centerline = `<g class="trace-centerline" fill="none" stroke="#9399a3" stroke-width="28" stroke-dasharray="28,54" stroke-linecap="round" stroke-linejoin="round">${mPaths}</g>`;
+    return `<symbol id="${traceSymId}" viewBox="0 0 1024 1024"><g transform="scale(1,-1) translate(0,-900)">${silhouette}${centerline}</g></symbol>`;
+  }
+  if (hasStrokes) {
+    const paths = item.strokePaths.map((d) => `<path d="${d}"/>`).join('');
+    return `<symbol id="${traceSymId}" viewBox="0 0 1024 1024"><g transform="scale(1,-1) translate(0,-900)" fill="#e5e8ed" stroke="#9399a3" stroke-width="18" stroke-dasharray="28,44" stroke-linecap="round" stroke-linejoin="round">${paths}</g></symbol>`;
+  }
+  return `<symbol id="${traceSymId}" viewBox="0 0 1024 1024"><text x="512" y="800" text-anchor="middle" font-family="'LXGW WenKai','Kaiti SC',STKaiti,KaiTi,serif" font-size="820" fill="#e5e8ed" stroke="#9399a3" stroke-width="18" stroke-dasharray="28,44" stroke-linecap="round" stroke-linejoin="round">${escapeHtml(item.char)}</text></symbol>`;
+}
+
 /** Render the illustration card interior (`.unit-art`) for `emoji`, `glyph`, or `upload`. */
 function renderIllustrationArt(item, geom, theme, symId, gradId) {
   const ill = item.illustration;
@@ -122,53 +141,38 @@ function renderStrokeRibbon(item, geom, theme) {
     </div>`;
 }
 
-/** Render the Tianzige practice grid (`.unit-grid`) with model col 0 and tracing rows. */
-function renderPracticeGrid(item, geom, symId) {
-  const { x, y, w, h, cols, rows, cell, trace } = geom.grid;
-  const rowInset = 0.35; // subtle separation between horizontal row strips, matching workbook
-  const boxH = +(cell - rowInset * 2).toFixed(2);
-  const glyphSize = +(boxH * 0.78).toFixed(2);
-  const glyphPadX = +((cell - glyphSize) / 2).toFixed(2);
-  const glyphPadY = +(rowInset + (boxH - glyphSize) / 2).toFixed(2);
+/** Render the Tianzige practice grid (`.unit-grid`) with model col 0 and dashed light-grey tracing rows. */
+function renderPracticeGrid(item, geom, symId, traceSymId) {
+  const { x, y, w, h, cols, rows, cell, colGap = 0, rowGap = 0, trace } = geom.grid;
+  const borderInset = 0.14;
+  const boxSide = +(cell - borderInset * 2).toFixed(2);
+  const glyphSize = +(cell * 0.78).toFixed(2);
+  const glyphPad = +((cell - glyphSize) / 2).toFixed(2);
 
   const cellsSvg = [];
   for (let r = 0; r < rows; r++) {
-    const ry = +(r * cell + rowInset).toFixed(2);
-    const midY = +(ry + boxH / 2).toFixed(2);
-
-    // Outer row background + horizontal dashed centerline across the entire row
-    cellsSvg.push(
-      `<rect x="0.15" y="${ry}" width="${+(w - 0.3).toFixed(2)}" height="${boxH}" fill="#ffffff" stroke="#8a94a4" stroke-width="0.28"/>`,
-      `<line x1="0.2" y1="${midY}" x2="${+(w - 0.2).toFixed(2)}" y2="${midY}" stroke="#cbd5e1" stroke-width="0.2" stroke-dasharray="1.1,0.9"/>`,
-    );
+    const ry = +(r * (cell + rowGap)).toFixed(2);
+    const midY = +(ry + cell / 2).toFixed(2);
 
     for (let c = 0; c < cols; c++) {
-      const cx = +(c * cell).toFixed(2);
+      const cx = +(c * (cell + colGap)).toFixed(2);
       const midX = +(cx + cell / 2).toFixed(2);
       const role = c === 0 ? 'model' : r < trace ? 'trace' : 'blank';
 
-      // Vertical cell divider + vertical dashed centerline
-      if (c > 0) {
-        cellsSvg.push(
-          `<line x1="${cx}" y1="${ry}" x2="${cx}" y2="${+(ry + boxH).toFixed(2)}" stroke="#94a3b8" stroke-width="0.24"/>`,
-        );
-      }
-      cellsSvg.push(
-        `<line x1="${midX}" y1="${ry}" x2="${midX}" y2="${+(ry + boxH).toFixed(2)}" stroke="#cbd5e1" stroke-width="0.2" stroke-dasharray="1.1,0.9"/>`,
-      );
-
-      // Cell hitbox for DOM/PDF coordinate inspection + character glyph
+      // Individual square Tianzige box + dashed crosshairs + character glyph
       cellsSvg.push(
         `<g class="grid-cell" data-cell="${r}-${c}" data-row="${r}" data-col="${c}" data-role="${role}">`,
-        `<rect x="${cx}" y="${ry}" width="${cell}" height="${boxH}" fill="transparent"/>`,
+        `<rect x="${+(cx + borderInset).toFixed(2)}" y="${+(ry + borderInset).toFixed(2)}" width="${boxSide}" height="${boxSide}" rx="0.6" fill="#ffffff" stroke="#8a94a4" stroke-width="0.28"/>`,
+        `<line x1="${+(cx + 0.25).toFixed(2)}" y1="${midY}" x2="${+(cx + cell - 0.25).toFixed(2)}" y2="${midY}" stroke="#cbd5e1" stroke-width="0.22" stroke-dasharray="1.3,1.0"/>`,
+        `<line x1="${midX}" y1="${+(ry + 0.25).toFixed(2)}" x2="${midX}" y2="${+(ry + cell - 0.25).toFixed(2)}" stroke="#cbd5e1" stroke-width="0.22" stroke-dasharray="1.3,1.0"/>`,
       );
       if (role === 'model') {
         cellsSvg.push(
-          `<use class="glyph-model" href="#${symId}" x="${+(cx + glyphPadX).toFixed(2)}" y="${+(r * cell + glyphPadY).toFixed(2)}" width="${glyphSize}" height="${glyphSize}" fill="#c4302b"/>`,
+          `<use class="glyph-model" href="#${symId}" x="${+(cx + glyphPad).toFixed(2)}" y="${+(ry + glyphPad).toFixed(2)}" width="${glyphSize}" height="${glyphSize}" fill="#c4302b"/>`,
         );
       } else if (role === 'trace') {
         cellsSvg.push(
-          `<use class="glyph-trace" href="#${symId}" x="${+(cx + glyphPadX).toFixed(2)}" y="${+(r * cell + glyphPadY).toFixed(2)}" width="${glyphSize}" height="${glyphSize}" fill="#b6beca"/>`,
+          `<use class="glyph-trace" data-trace-style="dashed" href="#${traceSymId}" x="${+(cx + glyphPad).toFixed(2)}" y="${+(ry + glyphPad).toFixed(2)}" width="${glyphSize}" height="${glyphSize}"/>`,
         );
       }
       cellsSvg.push(`</g>`);
@@ -181,6 +185,7 @@ function renderPracticeGrid(item, geom, symId) {
          data-grid-rows="${rows}"
          data-grid-cols="${cols}"
          data-grid-trace="${trace}"
+         data-grid-cell-mm="${cell}"
          style="left:${x}mm;top:${y}mm;width:${w}mm;height:${h}mm;">
       <svg class="unit-grid-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
         ${cellsSvg.join('')}
@@ -192,12 +197,14 @@ function renderPracticeGrid(item, geom, symId) {
 export function renderCharUnitHtml(item, slot, unitIdx, pageIdx, settings) {
   const perPage = settings.perPage || 2;
   const geom = unitGeometry(perPage, slot, {
+    cols: settings.cols ?? undefined,
     rows: settings.rows ?? undefined,
     trace: settings.trace ?? undefined,
   });
   const theme = themeFor(item.index ?? pageIdx * perPage + unitIdx, settings.mono);
   const uid = `p${pageIdx}u${unitIdx}`;
   const symId = `hz-sym-${uid}`;
+  const traceSymId = `hz-trace-${uid}`;
   const gradId = `hz-grad-${uid}`;
 
   const gb = geom.glyphBox;
@@ -225,6 +232,7 @@ export function renderCharUnitHtml(item, slot, unitIdx, pageIdx, settings) {
             <stop offset="100%" stop-color="${theme.dark}" />
           </linearGradient>
           ${buildCharSymbol(symId, item)}
+          ${buildTraceSymbol(traceSymId, item)}
         </defs>
       </svg>
 
@@ -269,7 +277,7 @@ export function renderCharUnitHtml(item, slot, unitIdx, pageIdx, settings) {
       ${renderStrokeRibbon(item, geom, theme)}
 
       <!-- Bottom Tianzige Practice Grid -->
-      ${renderPracticeGrid(item, geom, symId)}
+      ${renderPracticeGrid(item, geom, symId, traceSymId)}
     </section>`;
 }
 

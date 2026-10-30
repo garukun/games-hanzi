@@ -14,7 +14,7 @@ const DB_NAME = 'hanzi-print-db';
 const DB_VERSION = 1;
 const STORE_NAME = 'overrides';
 const LS_PREFIX = 'hanzi-print:ov:';
-const LS_SETTINGS = 'hanzi-print:settings';
+const LS_SETTINGS = 'hanzi-print:settings:v2';
 
 function openIdb() {
   if (typeof indexedDB === 'undefined') return Promise.resolve(null);
@@ -96,6 +96,7 @@ export function createPrintStore(initialSettings = {}) {
     searchQuery: '',
     settings: {
       perPage: 2,
+      cols: null,
       rows: null,
       trace: null,
       mono: false,
@@ -163,7 +164,8 @@ export function createPrintStore(initialSettings = {}) {
       perPageChanged = true;
     }
     Object.assign(state.settings, patch);
-    if (perPageChanged && patch.rows === undefined && patch.trace === undefined) {
+    if (perPageChanged && patch.cols === undefined && patch.rows === undefined && patch.trace === undefined) {
+      state.settings.cols = null;
       state.settings.rows = null;
       state.settings.trace = null;
     }
@@ -310,6 +312,7 @@ export function createPrintStore(initialSettings = {}) {
       radical,
       strokes,
       strokePaths: hz.s,
+      medianPaths: hz.m,
       fallbackFont: Boolean(hz.fallback),
       illustration,
       isEdited: Object.keys(ov).length > 0,

@@ -28,15 +28,19 @@ export function themeFor(index, mono = false) {
   return mono ? MONO_THEME : THEMES[((index % THEMES.length) + THEMES.length) % THEMES.length];
 }
 
-/* Per-layout design constants (mm). `defRows`/`defTrace` are defaults the user can override. */
+/* Per-layout design constants (mm). `cols`/`defRows`/`defTrace` are defaults the user can override. */
 export const SPECS = {
-  1: { mode: 'col', hh: 60, gap: 3, gw: 70, ph: 17, card: 'wide', sh: 22, cols: 10, defRows: 8, defTrace: 2,
+  1: { mode: 'col', hh: 60, gap: 3, gw: 70, ph: 17, card: 'wide', sh: 22,
+       cols: 6, defRows: 4, defTrace: 2, colGap: 2.5, rowGap: 2.8, minCols: 2, maxCols: 12,
        maxWords: 3, budget: 10, stepMax: 12, fs: 4.1, labelW: 9 },
-  2: { mode: 'col', hh: 44, gap: 3, gwRatio: 0.5, ph: 12, card: 'tall', sh: 13, cols: 6, defRows: 10, defTrace: 3,
+  2: { mode: 'col', hh: 44, gap: 3, gwRatio: 0.5, ph: 12, card: 'tall', sh: 13,
+       cols: 4, defRows: 6, defTrace: 2, colGap: 1.8, rowGap: 2.8, minCols: 2, maxCols: 10,
        maxWords: 2, budget: 8, stepMax: 9, fs: 3.3, labelW: 6.5 },
-  3: { mode: 'row', hh: 44, gap: 3, leftW: 70, gw: 33, ph: 11, card: 'tall', cols: 8, defRows: 5, defTrace: 2,
+  3: { mode: 'row', hh: 44, gap: 3, leftW: 70, gw: 33, ph: 11, card: 'tall',
+       cols: 5, defRows: 3, defTrace: 1, colGap: 1.8, rowGap: 2.2, minCols: 2, maxCols: 10,
        maxWords: 2, budget: 6, stepMax: 9, fs: 3, labelW: 6.5 },
-  4: { mode: 'col', hh: 38, gap: 3, gwRatio: 0.5, ph: 11, card: 'tall', sh: 11, cols: 6, defRows: 4, defTrace: 1,
+  4: { mode: 'col', hh: 36, gap: 2.4, gwRatio: 0.5, ph: 10.5, card: 'tall', sh: 10.8,
+       cols: 4, defRows: 3, defTrace: 1, colGap: 2.15, rowGap: 1.8, minCols: 2, maxCols: 10,
        maxWords: 2, budget: 8, stepMax: 8, fs: 3.1, labelW: 6 },
 };
 
@@ -118,12 +122,36 @@ export function unitGeometry(perPage, slot, opts = {}) {
     g.info = { x: 0, y: artH, w: c.w, h: r2(c.h - artH) };
   }
 
-  const cols = spec.cols;
-  const cell = g.gridW / cols;
-  const maxRows = Math.max(1, Math.floor((h - g.gridY) / cell + 1e-6));
+  const minCols = spec.minCols ?? 2;
+  const maxCols = spec.maxCols ?? 12;
+  const cols = clamp(Math.round(opts.cols ?? spec.cols), minCols, maxCols);
+  const colGap = r2(clamp(opts.colGap ?? spec.colGap ?? 1.8, 0, 8));
+  const minRowGap = r2(clamp(opts.rowGap ?? spec.rowGap ?? 2.0, 0, 10));
+  const availH = Math.max(10, h - g.gridY);
+  const cellByW = (g.gridW - Math.max(0, cols - 1) * colGap) / cols;
+  const cell = Math.floor(Math.min(cellByW, availH) * 100) / 100;
+  const maxRows = Math.max(1, Math.floor((availH + minRowGap) / (cell + minRowGap) + 1e-6));
   const rows = clamp(Math.round(opts.rows ?? spec.defRows), 1, maxRows);
   const trace = clamp(Math.round(opts.trace ?? spec.defTrace), 0, rows);
-  g.grid = { x: g.gridX, y: g.gridY, w: g.gridW, h: r2(rows * cell), cols, rows, cell: r2(cell), maxRows, trace };
+  const maxFitRowGap = rows > 1 ? Math.floor(((availH - rows * cell) / (rows - 1)) * 100) / 100 : 0;
+  const rowGap = rows > 1 ? r2(Math.min(maxFitRowGap, minRowGap * 1.6)) : 0;
+  const gridW = r2(cols * cell + Math.max(0, cols - 1) * colGap);
+  const gridH = r2(rows * cell + Math.max(0, rows - 1) * rowGap);
+  g.grid = {
+    x: g.gridX,
+    y: g.gridY,
+    w: gridW,
+    h: gridH,
+    cols,
+    rows,
+    cell,
+    colGap,
+    rowGap,
+    minCols,
+    maxCols,
+    maxRows,
+    trace,
+  };
   return g;
 }
 

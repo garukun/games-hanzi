@@ -117,3 +117,62 @@ test('print illustrations: all 1000 characters in v6 resolve to a valid local SV
   assert.equal(si.id, 'pineapple');
   assert.equal(si.count, 4);
 });
+
+test('print strokes: 2-tier stroke bundles cover all 1000 core characters + 2757 extended GB2312 characters', async () => {
+  const { parseDataset } = await import('../js/schema.js');
+  const { ensureHanziData, clearHanziCache } = await import('../js/hanzi-data.js');
+
+  const rawV6 = fs.readFileSync(path.join(PRINTER_ROOT, 'spec/data/hanzi-1000-v6.json'), 'utf8');
+  const coreBundle = JSON.parse(
+    fs.readFileSync(path.join(PRINTER_ROOT, 'assets/strokes/hanzi-strokes-core-1000.json'), 'utf8'),
+  );
+  const extendedBundle = JSON.parse(
+    fs.readFileSync(path.join(PRINTER_ROOT, 'assets/strokes/hanzi-strokes-extended-gb2312.json'), 'utf8'),
+  );
+
+  const doc = parseDataset(rawV6);
+  assert.equal(Object.keys(coreBundle).length, 1000);
+  assert.equal(Object.keys(extendedBundle).length, 2757);
+
+  for (const c of doc.characters) {
+    const entry = coreBundle[c.char];
+    assert.ok(entry && Array.isArray(entry.s) && entry.s.length > 0, `missing core stroke paths for ${c.char}`);
+    assert.ok(Array.isArray(entry.m) && entry.m.length === entry.s.length, `missing median paths for ${c.char}`);
+  }
+
+  clearHanziCache();
+  let coreCalls = 0;
+  let extCalls = 0;
+  // Requesting a core character only loads Tier 1 (core-1000), never Tier 2 (extended-gb2312)
+  const map1 = await ensureHanziData(['一', '人'], {
+    fetchCore: async () => {
+      coreCalls++;
+      return coreBundle;
+    },
+    fetchExtended: async () => {
+      extCalls++;
+      return extendedBundle;
+    },
+    allowCdn: false,
+  });
+  assert.equal(coreCalls, 1);
+  assert.equal(extCalls, 0);
+  assert.equal(map1.get('一').fallback, false);
+
+  // Requesting an extended GB2312 character lazy-loads Tier 2 once
+  const extChar = Object.keys(extendedBundle)[0];
+  const map2 = await ensureHanziData([extChar], {
+    fetchCore: async () => {
+      coreCalls++;
+      return coreBundle;
+    },
+    fetchExtended: async () => {
+      extCalls++;
+      return extendedBundle;
+    },
+    allowCdn: false,
+  });
+  assert.equal(coreCalls, 1);
+  assert.equal(extCalls, 1);
+  assert.equal(map2.get(extChar).fallback, false);
+});

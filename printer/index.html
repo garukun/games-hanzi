@@ -39,15 +39,19 @@
         <button type="button" class="seg-btn" data-per-page="4" data-testid="per-page-4">4 字/页</button>
       </div>
 
-      <!-- Grid rows & trace rows -->
+      <!-- Grid cols, rows & trace rows -->
       <div class="control-group compact-inputs">
+        <label class="inline-field" title="每行田字格数量（调小可让每个田字格更大、更宽松）">
+          <span>每行</span>
+          <input type="number" id="setting-cols" data-testid="setting-cols" min="2" max="10" value="4" />
+        </label>
         <label class="inline-field" title="每个汉字的田字格总行数">
           <span>总行</span>
-          <input type="number" id="setting-rows" data-testid="setting-rows" min="1" max="12" value="10" />
+          <input type="number" id="setting-rows" data-testid="setting-rows" min="1" max="12" value="6" />
         </label>
-        <label class="inline-field" title="带浅灰描红字的行数">
+        <label class="inline-field" title="带淡灰虚线描红字的行数">
           <span>描红</span>
-          <input type="number" id="setting-trace" data-testid="setting-trace" min="0" max="12" value="3" />
+          <input type="number" id="setting-trace" data-testid="setting-trace" min="0" max="12" value="2" />
         </label>
         <label class="inline-check" title="切换黑白省墨打印模式">
           <input type="checkbox" id="setting-mono" data-testid="setting-mono" />

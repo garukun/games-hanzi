@@ -286,6 +286,34 @@ test('E2E PDF Verification Suite', async (t) => {
       traceStats.nonWhiteRatio > blankStats.nonWhiteRatio + 0.03,
       `Trace cell must have significantly more ink than blank cell (${traceStats.nonWhiteRatio.toFixed(3)} vs ${blankStats.nonWhiteRatio.toFixed(3)})`,
     );
+
+    // Verify dashed light-grey tracing DOM attributes & adjustable cols control
+    const traceDomInfo = await page.evaluate(() => {
+      const grid = document.querySelector('.char-unit[data-char="四"] .unit-grid');
+      const traceUse = grid?.querySelector('.glyph-trace');
+      const centerlines = document.querySelectorAll('.char-unit[data-char="四"] .trace-centerline path').length;
+      return {
+        cellMm: Number(grid?.dataset.gridCellMm || 0),
+        cols: Number(grid?.dataset.gridCols || 0),
+        traceStyle: traceUse?.dataset.traceStyle || '',
+        centerlines,
+      };
+    });
+    assert.equal(traceDomInfo.traceStyle, 'dashed', 'Tracing glyphs must use dashed style');
+    assert.equal(traceDomInfo.centerlines, 5, '"四" tracing symbol must have 5 dashed centerline stroke paths');
+    assert.ok(traceDomInfo.cellMm >= 21, `Default 2-per-page Tianzige cell should be >= 21mm (got ${traceDomInfo.cellMm}mm)`);
+
+    // Lower setting-cols from 4 to 3 -> cell size grows even larger
+    await page.locator('[data-testid="setting-cols"]').fill('3');
+    await page.locator('[data-testid="setting-cols"]').dispatchEvent('change');
+    const sparserCellMm = await page.evaluate(() =>
+      Number(document.querySelector('.char-unit[data-char="四"] .unit-grid')?.dataset.gridCellMm || 0),
+    );
+    assert.ok(sparserCellMm > traceDomInfo.cellMm + 5, `Setting cols=3 must enlarge each Tianzige cell (${sparserCellMm}mm vs ${traceDomInfo.cellMm}mm)`);
+
+    // Restore cols=4
+    await page.locator('[data-testid="setting-cols"]').fill('4');
+    await page.locator('[data-testid="setting-cols"]').dispatchEvent('change');
   });
 
   // ---------------------------------------------------------------------------
@@ -671,9 +699,9 @@ test('E2E PDF Verification Suite', async (t) => {
   });
 
   // ---------------------------------------------------------------------------
-  // 10. 24 Random Characters from spec/data/hanzi-1000-v6.json in Layout 3 (8 Pages)
+  // 10. 24 Random Characters from spec/data/hanzi-1000-v6.json across Layout 2, Layout 3 & Layout 4
   // ---------------------------------------------------------------------------
-  await t.test('10. 24 random characters from hanzi-1000-v6.json in Layout 3 (3 chars/page, 8 pages): PDF export, screenshots & pixel verification', async () => {
+  await t.test('10. 24 random characters from hanzi-1000-v6.json across Layout 2 (12p), Layout 3 (8p) & Layout 4 (6p): default large Tianzige, dashed grey tracing & PDF pixel verification', async () => {
     const rawV6 = JSON.parse(readFileSync(join(PRINTER_ROOT, 'spec/data/hanzi-1000-v6.json'), 'utf8'));
     const allChars = rawV6.groups.flatMap((g) =>
       g.characters.map((c) => ({ ...c, category: g.category })),
@@ -687,13 +715,13 @@ test('E2E PDF Verification Suite', async (t) => {
     }
     const picked24 = pool.slice(0, 24);
     console.log(
-      `[random-24-layout-3] Picked 24 random characters: ${picked24.map((c) => `${c.char}(${c.pinyin})`).join(', ')}`,
+      `[random-24-layouts-2-3-4] Picked 24 random characters: ${picked24.map((c) => `${c.char}(${c.pinyin})`).join(', ')}`,
     );
 
     const random24Dataset = {
       meta: {
-        title: '随机24字抽样字帖 · 每页3字（Layout 3）',
-        description: '从 printer/spec/data/hanzi-1000-v6.json 随机抽取 24 个汉字进行 Layout 3 端到端 PDF 验证',
+        title: '随机24字抽样字帖 · 大田字格与虚线描红验证',
+        description: '从 printer/spec/data/hanzi-1000-v6.json 随机抽取 24 个汉字进行 Layout 2 / 3 / 4 端到端 PDF 验证',
       },
       groups: [
         {
@@ -703,70 +731,130 @@ test('E2E PDF Verification Suite', async (t) => {
       ],
     };
 
-    await uploadJsonDataset(page, random24Dataset, 'random-24-layout-3.json');
-    await page.locator('[data-testid="per-page-3"]').click();
+    const EXPECTED_GRID_DEFAULTS = {
+      2: { cols: 4, rows: 6, trace: 2, minCellMm: 21.4, blankRow: 5 },
+      3: { cols: 5, rows: 3, trace: 1, minCellMm: 21.4, blankRow: 2 },
+      4: { cols: 4, rows: 3, trace: 1, minCellMm: 21.4, blankRow: 2 },
+    };
 
-    // Capture full workbench UI screenshot showing 24 chars selected & 3 chars/page
-    const uiScreenshotPath = join(OUT_DIR, 'random-24-layout-3-workbench-ui.png');
-    await page.screenshot({ path: uiScreenshotPath, fullPage: false });
+    await uploadJsonDataset(page, random24Dataset, 'random-24-layouts.json');
 
-    // Verify DOM stroke steps & zero overflow for all 24 random characters
-    const domCheck = await page.evaluate(async () => {
-      await window.__hanziPrintPrepare();
-      const mismatches = [];
-      let overflowCount = 0;
-      for (const unit of document.querySelectorAll('.char-unit')) {
-        const ch = unit.dataset.char;
-        const expectedStrokes = Number(unit.querySelector('[data-field="strokes"]')?.textContent);
-        const stepBoxes = unit.querySelectorAll('[data-stroke-ribbon] .stroke-step').length;
-        if (stepBoxes !== expectedStrokes) {
-          mismatches.push({ ch, expectedStrokes, stepBoxes });
+    for (const perPage of [2, 3, 4]) {
+      await page.locator(`[data-testid="per-page-${perPage}"]`).click();
+      const expectedPages = Math.ceil(picked24.length / perPage);
+      const expGrid = EXPECTED_GRID_DEFAULTS[perPage];
+
+      // Capture workbench UI screenshot for each layout
+      const uiScreenshotPath = join(OUT_DIR, `random-24-layout-${perPage}-workbench-ui.png`);
+      await page.screenshot({ path: uiScreenshotPath, fullPage: false });
+
+      // Verify toolbar inputs reflect default large Tianzige settings
+      const toolbarVals = await page.evaluate(() => ({
+        cols: Number(document.getElementById('setting-cols')?.value || 0),
+        rows: Number(document.getElementById('setting-rows')?.value || 0),
+        trace: Number(document.getElementById('setting-trace')?.value || 0),
+      }));
+      assert.equal(toolbarVals.cols, expGrid.cols, `Layout ${perPage} default cols input must be ${expGrid.cols}`);
+      assert.equal(toolbarVals.rows, expGrid.rows, `Layout ${perPage} default rows input must be ${expGrid.rows}`);
+      assert.equal(toolbarVals.trace, expGrid.trace, `Layout ${perPage} default trace input must be ${expGrid.trace}`);
+
+      // Verify DOM stroke steps, default large Tianzige geometry, dashed tracing & zero overflow for all 24 characters
+      const domCheck = await page.evaluate(async () => {
+        await window.__hanziPrintPrepare();
+        const mismatches = [];
+        const gridIssues = [];
+        let overflowCount = 0;
+        for (const unit of document.querySelectorAll('.char-unit')) {
+          const ch = unit.dataset.char;
+          const expectedStrokes = Number(unit.querySelector('[data-field="strokes"]')?.textContent);
+          const stepBoxes = unit.querySelectorAll('[data-stroke-ribbon] .stroke-step').length;
+          if (stepBoxes !== expectedStrokes) {
+            mismatches.push({ ch, expectedStrokes, stepBoxes });
+          }
+          const grid = unit.querySelector('.unit-grid');
+          const cellMm = Number(grid?.dataset.gridCellMm || 0);
+          const cols = Number(grid?.dataset.gridCols || 0);
+          const rows = Number(grid?.dataset.gridRows || 0);
+          const trace = Number(grid?.dataset.gridTrace || 0);
+          const traceUse = grid?.querySelector('.glyph-trace');
+          const centerlines = unit.querySelectorAll('.trace-centerline path').length;
+          if (!traceUse || traceUse.dataset.traceStyle !== 'dashed' || centerlines !== expectedStrokes) {
+            gridIssues.push({ ch, traceStyle: traceUse?.dataset.traceStyle, centerlines, expectedStrokes });
+          }
+          if (cellMm < 21.4) {
+            gridIssues.push({ ch, cellMm, cols, rows, trace });
+          }
+          const info = unit.querySelector('.unit-info');
+          if (info && (info.scrollWidth > info.clientWidth + 2 || info.scrollHeight > info.clientHeight + 2)) {
+            overflowCount++;
+          }
+          const track = unit.querySelector('.stroke-track');
+          if (track && track.scrollHeight > track.clientHeight + 2) {
+            overflowCount++;
+          }
         }
-        const info = unit.querySelector('.unit-info');
-        if (info && (info.scrollWidth > info.clientWidth + 2 || info.scrollHeight > info.clientHeight + 2)) {
-          overflowCount++;
+        return { mismatches, gridIssues, overflowCount, totalUnits: document.querySelectorAll('.char-unit').length };
+      });
+      assert.equal(domCheck.totalUnits, 24, `Layout ${perPage}: all 24 random character units must be rendered`);
+      assert.deepEqual(domCheck.mismatches, [], `Layout ${perPage}: stroke ribbon steps must match stroke count`);
+      assert.deepEqual(domCheck.gridIssues, [], `Layout ${perPage}: all 24 units must have large Tianzige (>=21.4mm) & dashed centerlines`);
+      assert.equal(domCheck.overflowCount, 0, `Layout ${perPage}: zero card or stroke-ribbon overflow for 24 random chars`);
+
+      const pdfPath = join(OUT_DIR, `random-24-layout-${perPage}.pdf`);
+      const pdfBuf = await exportPdfBuffer(page, pdfPath);
+      const info = await inspectPdfTextAndMeta(pdfBuf);
+
+      assert.equal(info.numPages, expectedPages, `24 chars at ${perPage} chars/page must produce ${expectedPages} PDF pages`);
+      assert.ok(info.fontNames.some((f) => /WenKai|g_d/i.test(f)), 'Embedded LXGW WenKai font must be present');
+
+      for (let p = 0; p < expectedPages; p++) {
+        const pageInfo = info.pages[p];
+        assert.ok(Math.abs(pageInfo.widthPt - 612) < 1, `Layout ${perPage} page ${p + 1} widthPt=${pageInfo.widthPt}`);
+        assert.ok(Math.abs(pageInfo.heightPt - 792) < 1, `Layout ${perPage} page ${p + 1} heightPt=${pageInfo.heightPt}`);
+        assert.ok(pageInfo.text.includes(`- ${p + 1} -`), `Layout ${perPage} page ${p + 1} footer must contain "- ${p + 1} -"`);
+
+        const slice = picked24.slice(p * perPage, (p + 1) * perPage);
+        const rendered = await renderPdfPageToImage(pdfBuf, p + 1, 2);
+        writeFileSync(join(OUT_DIR, `random-24-layout-${perPage}-page${p + 1}.png`), rendered.pngBuffer);
+
+        for (const item of slice) {
+          assert.ok(pageInfo.text.includes(item.char), `Layout ${perPage} page ${p + 1} PDF text must include char ${item.char}`);
+          assert.ok(pageInfo.text.includes(item.pinyin), `Layout ${perPage} page ${p + 1} PDF text must include pinyin ${item.pinyin}`);
+          assert.ok(pageInfo.text.includes(item.words[0]), `Layout ${perPage} page ${p + 1} PDF text must include word ${item.words[0]}`);
+
+          const rectPt = await getElementPdfRect(page, p, `.unit-art[data-illustration-slot="${item.char}"]`);
+          assert.ok(rectPt, `Illustration rect for "${item.char}" on Layout ${perPage} page ${p + 1}`);
+          const crop = cropPdfRegion(rendered, rectPt, 2);
+          const stats = analyzeRegionPixels(crop);
+          assert.ok(
+            stats.nonWhiteRatio > 0.015,
+            `Layout ${perPage} page ${p + 1} char "${item.char}" illustration must be non-empty (nonWhite=${stats.nonWhiteRatio.toFixed(3)})`,
+          );
         }
-        const track = unit.querySelector('.stroke-track');
-        if (track && track.scrollHeight > track.clientHeight + 2) {
-          overflowCount++;
+
+        // Verify red model cell, light-grey dashed trace cell, and blank cell on the first character of page 1
+        if (p === 0) {
+          const firstChar = slice[0].char;
+          const modelRect = await getElementPdfRect(page, 0, `.char-unit[data-char="${firstChar}"] .grid-cell[data-cell="0-0"]`);
+          const traceRect = await getElementPdfRect(page, 0, `.char-unit[data-char="${firstChar}"] .grid-cell[data-cell="0-1"]`);
+          const blankRect = await getElementPdfRect(page, 0, `.char-unit[data-char="${firstChar}"] .grid-cell[data-cell="${expGrid.blankRow}-1"]`);
+          const modelStats = analyzeRegionPixels(cropPdfRegion(rendered, modelRect, 3));
+          const traceStats = analyzeRegionPixels(cropPdfRegion(rendered, traceRect, 3));
+          const blankStats = analyzeRegionPixels(cropPdfRegion(rendered, blankRect, 3));
+
+          assert.ok(
+            modelStats.redPixels > 15 && modelStats.redRatio > 0.2,
+            `Layout ${perPage} "${firstChar}" col 0 must have red model glyph (redPixels=${modelStats.redPixels})`,
+          );
+          assert.ok(
+            traceStats.greyPixels > 15 && traceStats.redPixels === 0,
+            `Layout ${perPage} "${firstChar}" trace cell must have light-grey dashed glyph (greyPixels=${traceStats.greyPixels})`,
+          );
+          assert.ok(
+            traceStats.nonWhiteRatio > blankStats.nonWhiteRatio + 0.02,
+            `Layout ${perPage} "${firstChar}" trace cell must have more ink than blank cell (${traceStats.nonWhiteRatio.toFixed(3)} vs ${blankStats.nonWhiteRatio.toFixed(3)})`,
+          );
         }
-      }
-      return { mismatches, overflowCount, totalUnits: document.querySelectorAll('.char-unit').length };
-    });
-    assert.equal(domCheck.totalUnits, 24, 'All 24 random character units must be rendered');
-    assert.deepEqual(domCheck.mismatches, [], 'Stroke ribbon steps must match stroke count for all 24 chars');
-    assert.equal(domCheck.overflowCount, 0, 'Zero card or stroke-ribbon overflow for 24 random chars in Layout 3');
-
-    const pdfPath = join(OUT_DIR, 'random-24-layout-3.pdf');
-    const pdfBuf = await exportPdfBuffer(page, pdfPath);
-    const info = await inspectPdfTextAndMeta(pdfBuf);
-
-    assert.equal(info.numPages, 8, '24 chars at 3 chars/page must produce 8 PDF pages');
-    assert.ok(info.fontNames.some((f) => /WenKai|g_d/i.test(f)), 'Embedded LXGW WenKai font must be present');
-
-    for (let p = 0; p < 8; p++) {
-      const pageInfo = info.pages[p];
-      assert.ok(Math.abs(pageInfo.widthPt - 612) < 1, `page ${p + 1} widthPt=${pageInfo.widthPt}`);
-      assert.ok(Math.abs(pageInfo.heightPt - 792) < 1, `page ${p + 1} heightPt=${pageInfo.heightPt}`);
-      assert.ok(pageInfo.text.includes(`- ${p + 1} -`), `page ${p + 1} footer must contain "- ${p + 1} -"`);
-
-      const slice = picked24.slice(p * 3, (p + 1) * 3);
-      const rendered = await renderPdfPageToImage(pdfBuf, p + 1, 2);
-      writeFileSync(join(OUT_DIR, `random-24-layout-3-page${p + 1}.png`), rendered.pngBuffer);
-
-      for (const item of slice) {
-        assert.ok(pageInfo.text.includes(item.char), `page ${p + 1} PDF text must include char ${item.char}`);
-        assert.ok(pageInfo.text.includes(item.pinyin), `page ${p + 1} PDF text must include pinyin ${item.pinyin}`);
-        assert.ok(pageInfo.text.includes(item.words[0]), `page ${p + 1} PDF text must include word ${item.words[0]}`);
-
-        const rectPt = await getElementPdfRect(page, p, `.unit-art[data-illustration-slot="${item.char}"]`);
-        assert.ok(rectPt, `Illustration rect for "${item.char}" on page ${p + 1}`);
-        const crop = cropPdfRegion(rendered, rectPt, 2);
-        const stats = analyzeRegionPixels(crop);
-        assert.ok(
-          stats.nonWhiteRatio > 0.015,
-          `Random char "${item.char}" illustration on page ${p + 1} must be non-empty (nonWhite=${stats.nonWhiteRatio.toFixed(3)})`,
-        );
       }
     }
   });
