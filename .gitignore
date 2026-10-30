@@ -1,2 +1,6 @@
-build/
+game/build/
 node_modules/
+.DS_Store
+
+printer/scripts/.cache/
+printer/e2e/output/

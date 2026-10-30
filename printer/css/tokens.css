@@ -1,0 +1,46 @@
+/**
+ * Font face & design tokens for the Hanzi practice-sheet workbench.
+ */
+
+@font-face {
+  font-family: 'LXGW WenKai';
+  src: url('../assets/fonts/LXGWWenKai-subset.woff2') format('woff2');
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: block;
+}
+
+:root {
+  --font-ui: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-kaiti: 'LXGW WenKai', 'Kaiti SC', STKaiti, KaiTi, serif;
+  --font-pinyin: 'LXGW WenKai', 'Helvetica Neue', Arial, sans-serif;
+
+  --bg-app: #f1f5f9;
+  --bg-panel: #ffffff;
+  --bg-subtle: #f8fafc;
+  --border-ui: #e2e8f0;
+  --border-strong: #cbd5e1;
+
+  --text-main: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+
+  --brand-primary: #2563eb;
+  --brand-primary-hover: #1d4ed8;
+  --brand-accent: #059669;
+  --brand-accent-hover: #047857;
+
+  --status-ok-bg: #ecfdf5;
+  --status-ok-border: #6ee7b7;
+  --status-ok-text: #065f46;
+
+  --status-warn-bg: #fffbeb;
+  --status-warn-border: #fcd34d;
+  --status-warn-text: #92400e;
+
+  --status-err-bg: #fef2f2;
+  --status-err-border: #fca5a5;
+  --status-err-text: #991b1b;
+
+  --sheet-zoom: 0.72;
+}

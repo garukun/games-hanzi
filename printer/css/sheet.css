@@ -1,0 +1,359 @@
+/**
+ * US Letter (215.9 × 279.4 mm) practice-sheet layout and @media print rules.
+ *
+ * Uses exact millimetre geometry so DOM positions map deterministically (px * 0.75 = pt)
+ * onto the generated 612 × 792 pt PDF pages.
+ */
+
+@page {
+  size: letter portrait;
+  margin: 0;
+}
+
+.sheet-page {
+  position: relative;
+  width: 215.9mm;
+  height: 279.4mm;
+  padding: 12.7mm;
+  background: #ffffff;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.16);
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+  /* Scale preview on screen using CSS zoom so layout & scroll heights match */
+  zoom: var(--sheet-zoom, 0.72);
+}
+
+/* Defer rendering only for pages strictly below the initial fold (pageIdx >= 2) */
+.sheet-page-deferred {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 215.9mm auto 279.4mm;
+}
+
+.sheet-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 5mm;
+  color: #94a3b8;
+  font-family: var(--font-kaiti);
+}
+
+.sheet-body {
+  position: relative;
+  width: 190.5mm;
+  height: 254mm;
+}
+
+.sheet-units {
+  position: relative;
+  width: 190.5mm;
+  height: 246mm;
+}
+
+/* Character Unit */
+.char-unit {
+  position: absolute;
+  cursor: pointer;
+  user-select: none;
+}
+
+.char-unit.is-selected {
+  outline: 0.6mm solid #2563eb;
+  outline-offset: 0.8mm;
+  border-radius: 2mm;
+}
+
+/* Top-Left Pinyin 4-line Grid + Main Character Tianzige */
+.unit-glyph-box {
+  position: absolute;
+  border: 0.45mm solid var(--theme-dark, #1d4f9c);
+  border-radius: 1.5mm;
+  background: #ffffff;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.unit-pinyin-box {
+  position: relative;
+  width: 100%;
+  border-bottom: 0.4mm solid var(--theme-dark, #1d4f9c);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+}
+
+.pinyin-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 0.25mm dashed var(--theme-mid, #8bb6ee);
+  pointer-events: none;
+}
+.pinyin-line-1 {
+  top: 32%;
+}
+.pinyin-line-2 {
+  top: 68%;
+}
+
+.unit-pinyin {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-pinyin);
+  font-weight: 600;
+  color: #111827;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.unit-main-char-box {
+  position: relative;
+  width: 100%;
+  background: #ffffff;
+}
+
+.unit-main-char-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Top-Right Rounded Card: Illustration + Metadata */
+.unit-card {
+  position: absolute;
+  border: 0.45mm solid var(--theme-main, #2f7de1);
+  border-radius: 3mm;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.unit-art {
+  position: absolute;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.art-stage {
+  position: absolute;
+}
+
+.art-emoji-icon {
+  position: absolute;
+  object-fit: contain;
+  display: block;
+}
+
+.art-upload-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.art-glyph-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Metadata info strip */
+.unit-info {
+  position: absolute;
+  border-top: 0.35mm solid var(--theme-mid, #8bb6ee);
+  padding: 1.2mm 2mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  font-family: var(--font-kaiti);
+  line-height: 1.2;
+  overflow: hidden;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 1.5mm;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.info-row-meta {
+  justify-content: flex-start;
+  gap: 3mm;
+}
+
+.meta-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.2mm;
+}
+
+.meta-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2mm 1.1mm;
+  border: 0.3mm solid var(--theme-main, #2f7de1);
+  border-radius: 0.9mm;
+  background: #ffffff;
+  font-size: 0.78em;
+  font-weight: 600;
+  line-height: 1.1;
+  flex-shrink: 0;
+}
+
+.meta-val {
+  font-weight: 600;
+  color: #111827;
+}
+
+.meta-words {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.8mm;
+  overflow: hidden;
+}
+
+.word-item {
+  display: inline-block;
+}
+
+/* Middle Stroke-Order Ribbon */
+.unit-stroke {
+  position: absolute;
+  border-radius: 2mm;
+  display: flex;
+  align-items: center;
+  padding: 1mm 1.2mm;
+  gap: 1mm;
+}
+
+.stroke-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-kaiti);
+  font-weight: 700;
+  line-height: 1.08;
+  flex-shrink: 0;
+}
+
+.stroke-track {
+  background: #ffffff;
+  border: 0.3mm solid var(--theme-mid, #8bb6ee);
+  border-radius: 1.4mm;
+  padding: 0.4mm 0.8mm;
+  display: grid;
+  align-items: center;
+  align-content: center;
+  justify-content: start;
+  gap: 0.35mm;
+  overflow: hidden;
+}
+
+.stroke-step {
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Bottom Tianzige Practice Grid */
+.unit-grid {
+  position: absolute;
+}
+
+.unit-grid-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Page Footer */
+.sheet-footer {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  font-family: var(--font-kaiti);
+  font-size: 2.9mm;
+  color: #475569;
+  padding-top: 1mm;
+}
+
+.footer-page-num {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-weight: 600;
+}
+
+.footer-chars,
+.footer-title {
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Print Media Rules */
+@media print {
+  html,
+  body {
+    width: 215.9mm !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .workbench-main {
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  .preview-pane,
+  .preview-scroll,
+  .sheet-stage {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    overflow: visible !important;
+  }
+
+  .sheet-page,
+  .sheet-page-deferred {
+    zoom: 1 !important;
+    width: 215.9mm !important;
+    height: 279.4mm !important;
+    margin: 0 !important;
+    padding: 12.7mm !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    content-visibility: visible !important;
+    contain-intrinsic-size: none !important;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .sheet-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .char-unit.is-selected {
+    outline: none !important;
+  }
+}

@@ -4,8 +4,21 @@
   "private": true,
   "description": "泡泡国学堂 — a single-file Chinese literacy game for young children",
   "scripts": {
-    "build": "node build.mjs",
-    "check:build": "node build.mjs --check",
-    "test": "node --test tests/"
+    "build": "node game/build.mjs",
+    "check:build": "node game/build.mjs --check",
+    "test": "node --test game/tests/ printer/tests/",
+    "test:game": "node --test game/tests/",
+    "test:printer": "node --test printer/tests/",
+    "print:assets": "node printer/scripts/print-assets.mjs",
+    "print:dev": "node printer/scripts/serve.mjs",
+    "test:e2e": "node --test printer/e2e/print.spec.mjs"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "^1.0.13",
+    "emojibase-data": "^18.0.0",
+    "pdfjs-dist": "^6.4.299",
+    "pixelmatch": "^8.0.0",
+    "playwright": "^1.64.1",
+    "pngjs": "^7.0.0"
   }
 }

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>汉字描红字帖打印工作台 · US Letter</title>
+  <link rel="stylesheet" href="./css/tokens.css" />
+  <link rel="stylesheet" href="./css/app.css" />
+  <link rel="stylesheet" href="./css/sheet.css" />
+</head>
+<body data-dataset-ready="false" data-print-ready="false">
+  <!-- Top Workbench Header (hidden in @media print) -->
+  <header class="app-header no-print">
+    <div class="brand-block">
+      <span class="brand-logo" aria-hidden="true">帖</span>
+      <div>
+        <h1 class="brand-title">汉字描红字帖打印工作台</h1>
+        <p class="brand-sub" id="summary-stats" data-testid="summary-stats">正在加载字库…</p>
+      </div>
+    </div>
+
+    <div class="toolbar-controls">
+      <!-- File upload & default reload -->
+      <div class="control-group">
+        <label class="btn btn-primary" for="json-file-input">
+          <span>📂 上传 JSON</span>
+          <input type="file" id="json-file-input" data-testid="json-file-input" accept=".json,application/json" hidden />
+        </label>
+        <button type="button" class="btn btn-secondary" id="btn-load-default" data-testid="btn-load-default" title="载入内置 1000 字标准字库">
+          内置 1000 字
+        </button>
+      </div>
+
+      <!-- Layout per-page selector (1 / 2 / 3 / 4 chars per Letter page) -->
+      <div class="control-group segmented-group" role="group" aria-label="每页字数">
+        <button type="button" class="seg-btn" data-per-page="1" data-testid="per-page-1">1 字/页</button>
+        <button type="button" class="seg-btn is-active" data-per-page="2" data-testid="per-page-2">2 字/页</button>
+        <button type="button" class="seg-btn" data-per-page="3" data-testid="per-page-3">3 字/页</button>
+        <button type="button" class="seg-btn" data-per-page="4" data-testid="per-page-4">4 字/页</button>
+      </div>
+
+      <!-- Grid rows & trace rows -->
+      <div class="control-group compact-inputs">
+        <label class="inline-field" title="每个汉字的田字格总行数">
+          <span>总行</span>
+          <input type="number" id="setting-rows" data-testid="setting-rows" min="1" max="12" value="10" />
+        </label>
+        <label class="inline-field" title="带浅灰描红字的行数">
+          <span>描红</span>
+          <input type="number" id="setting-trace" data-testid="setting-trace" min="0" max="12" value="3" />
+        </label>
+        <label class="inline-check" title="切换黑白省墨打印模式">
+          <input type="checkbox" id="setting-mono" data-testid="setting-mono" />
+          <span>黑白省墨</span>
+        </label>
+        <label class="inline-check" title="在页脚显示字库标题">
+          <input type="checkbox" id="setting-footer-title" data-testid="setting-footer-title" checked />
+          <span>页脚标题</span>
+        </label>
+      </div>
+
+      <!-- Export & Print -->
+      <div class="control-group">
+        <button type="button" class="btn btn-secondary" id="btn-export-json" data-testid="btn-export-json" title="导出合并微调后的 JSON 文件">
+          ⬇ 导出 JSON
+        </button>
+        <button type="button" class="btn btn-accent" id="btn-print-pdf" data-testid="btn-print-pdf">
+          🖨 打印 / 导出 PDF
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main 3-Column Workbench -->
+  <main class="workbench-main">
+    <!-- Left Sidebar: Validation + Character Selection -->
+    <aside class="sidebar-left no-print" id="sidebar-left">
+      <div id="validation-panel" data-testid="validation-panel"></div>
+
+      <div class="selection-controls">
+        <div class="search-row">
+          <input type="search" id="char-search-input" data-testid="char-search-input" placeholder="搜索汉字、拼音或组词…" />
+        </div>
+        <div class="quick-select-row">
+          <button type="button" class="btn btn-xs btn-secondary" id="btn-select-all" data-testid="btn-select-all">全选</button>
+          <button type="button" class="btn btn-xs btn-secondary" id="btn-select-none" data-testid="btn-select-none">清空</button>
+          <div class="range-select-box">
+            <span>序号</span>
+            <input type="number" id="range-start" data-testid="range-start" min="1" max="1000" value="1" aria-label="起始字序号" />
+            <span>-</span>
+            <input type="number" id="range-end" data-testid="range-end" min="1" max="1000" value="12" aria-label="结束字序号" />
+            <button type="button" class="btn btn-xs btn-secondary" id="btn-select-range" data-testid="btn-select-range">选取</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="groups-scroll" id="groups-list" data-testid="groups-list"></div>
+    </aside>
+
+    <!-- Center Preview Stage: US Letter Sheets -->
+    <section class="preview-pane">
+      <div class="preview-bar no-print">
+        <div class="preview-bar-left">
+          <span>纸张规格：<strong>US Letter (8.5 × 11 in / 215.9 × 279.4 mm)</strong></span>
+        </div>
+        <div class="preview-bar-right">
+          <label class="inline-field">
+            <span>跳转页码</span>
+            <input type="number" id="page-jump-input" data-testid="page-jump-input" min="1" value="1" />
+          </label>
+          <label class="inline-field">
+            <span>预览缩放</span>
+            <input type="range" id="setting-zoom" data-testid="setting-zoom" min="45" max="110" value="72" />
+          </label>
+        </div>
+      </div>
+
+      <div class="preview-scroll">
+        <div class="sheet-stage" id="sheet-stage" data-testid="sheet-stage"></div>
+      </div>
+    </section>
+
+    <!-- Right Sidebar: Per-Character Editor -->
+    <aside class="sidebar-right no-print" id="editor-panel" data-testid="editor-panel"></aside>
+  </main>
+
+  <!-- Print Preparation Progress Modal -->
+  <div class="print-modal-backdrop no-print" id="print-progress-modal" hidden>
+    <div class="print-modal">
+      <h3>正在准备高清打印页面</h3>
+      <p id="print-progress-text">正在渲染字帖…</p>
+      <div class="progress-track">
+        <div class="progress-fill" id="print-progress-bar" style="width: 0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
