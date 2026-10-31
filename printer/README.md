@@ -37,6 +37,7 @@ printer/
 │   └── fonts/
 │       └── LXGWWenKai-subset.woff2     # 霞鹜文楷子集字体（覆盖 GB2312 + 拼音符号，供标题/组词/回退使用）
 ├── scripts/
+│   ├── print-pdf.mjs                   # 字帖 PDF CLI（layout + 可选 JSON → Chromium page.pdf()）
 │   ├── serve.mjs                       # 零依赖本地静态开发服务器（内置 Gzip 动态压缩）
 │   └── print-assets.mjs                # 离线资产打包脚本（从 Make Me a Hanzi / Fluent Emoji 生成数据包）
 ├── tests/                              # Node 单元测试（版面几何、田字格尺寸、字库校验、双层笔画加载）
@@ -122,6 +123,51 @@ printer/
   ```
   该命令会将 `assets/strokes/hanzi-strokes-core-1000.json` 与 `hanzi-strokes-extended-gb2312.json` 以 2 空格缩进格式输出，方便直接用编辑器搜索任意汉字（如 `"水"`）查看其 `s` 与 `m` 路径。
 
+### 打印 PDF（给人或 AI agent 的 CLI）
+
+字帖 PDF 仍由工作台页面经 Chromium `page.pdf()` 导出，选项与 `e2e/print.spec.mjs` 相同（`format: Letter`、`printBackground`、`preferCSSPageSize`），不另写一套渲染器。排版默认值来自应用自身的 `js/layout.js`，用 `--describe` 查看，不要手写。
+
+```bash
+# 仓库根目录：无额外参数的已发布任务。应用自己提供字库和田字格默认值。
+npm run print:layout-3
+npm run print:layout-2
+# 工作台按钮「3 字/页」和旧指令「跑 e2e，layout 3」是同一个已发布任务：
+npm run test:e2e layout 3
+node printer/scripts/print-pdf.mjs "3 字/页" --limit 24 --dry-run
+# 拆开的应用选项同样不是文件名：layout 3 limit 6、3 字/页 每行 5、黑白省墨、序号 1-12
+node printer/scripts/print-pdf.mjs layout 3 limit 6 --dry-run
+node printer/scripts/print-pdf.mjs "3 字/页" 每行 5 黑白省墨 --dry-run
+node printer/scripts/print-pdf.mjs layout 3 序号 1 - 12 --dry-run
+node printer/scripts/print-pdf.mjs layout 3 --no-footer-title --dry-run
+node printer/scripts/print-pdf.mjs layout 3 关闭 页脚标题 --dry-run
+node printer/scripts/print-pdf.mjs layout 3 把 页脚标题 关闭 --dry-run
+node printer/scripts/print-pdf.mjs layout 3 页脚标题关闭 --dry-run
+node printer/scripts/print-pdf.mjs "layout 3，页脚标题关闭" --dry-run
+node printer/scripts/print-pdf.mjs layout 3 showFooterTitlefalse --dry-run
+node printer/scripts/print-pdf.mjs "layout 3，showFooterTitlefalse" --dry-run
+node printer/scripts/print-pdf.mjs layout 3 showFooterTitle-off --dry-run
+node printer/scripts/print-pdf.mjs layout 3 showFooterTitle -off --dry-run
+node printer/scripts/print-pdf.mjs "layout 3，showFooterTitle -off" --dry-run
+node printer/scripts/print-pdf.mjs layout 3 showFooterTitle - off --dry-run
+node printer/scripts/print-pdf.mjs "layout 3，showFooterTitle - off" --dry-run
+node printer/scripts/print-pdf.mjs layout 3 off-showFooterTitle --dry-run
+node printer/scripts/print-pdf.mjs "layout 3，off-showFooterTitle" --dry-run
+node printer/scripts/print-pdf.mjs "layout 3，setting-footer-title-off" --dry-run
+# 应用发布的任务文件本身就是参数（等价于 --config），不是字库：
+node printer/scripts/print-pdf.mjs printer/spec/print-job.example.json --limit 24 --dry-run
+# 任意工作目录（含 printer/）：先取绝对 argv，再把 flag 加在 node 上，不要加在 npm 上。
+node printer/scripts/print-pdf.mjs --describe
+# jobs[].argv 形如：<node> <abs>/printer/scripts/print-pdf.mjs layout 3
+# 在 printer/ 目录里相对路径是 node scripts/print-pdf.mjs，不是 node printer/scripts/print-pdf.mjs。
+node scripts/print-pdf.mjs layout 3 --limit 24 --dry-run
+```
+
+`"layout 3"` 作为一个参数、`layout 3` 作为两个参数、`layout=3` 都是同一个应用发布的任务，不是输入文件名。整句旧指令作为同一个参数也是这个任务，不是缺失的文件名：`run the end-to-end test to generate the PDF, layout 3`（`--describe` 的 `example.instructionArgv`）。拆成多个参数也一样：逗号粘在 `PDF,` 或 `file,` 上仍是说明文字，不是文件名；粘在已存在的 `printer/spec/data/hanzi-1000-v6.json,` 上则仍是那个文件。句中的 `--limit`、`--dry-run`、`cols` 和工作台标签「每行 / 总行 / 描红」是选项，不是文件名；拆成多个参数也一样（`layout 3 limit 6`、`3 字/页 每行 5`、`黑白省墨`），不是缺失的文件名；工作台「序号」选取也一样（`序号 1-12`、`选取 1 - 6`），中间的连字符不是选项，单独的「选取」不会改变选择；`--no-mono` 与 `--no-footer-title` 是工作台复选框的真正 flag，不是未知选项，`--no-footer-title` 会取消页脚标题（默认开启）；`--footer-title false`、`--mono=off`、`页脚标题 off` 和 `setting-footer-title false` 也会取消勾选，不是文件名，也不会把复选框留在勾选状态；单独的 `false` 仍是文件名；标签前的动词也一样：`关闭 页脚标题`、`关闭页脚标题`、`不显示 页脚标题` 会取消页脚标题，不是名为「关闭」的文件，也不会留在勾选状态；`开启 黑白省墨` 会勾选黑白省墨；单独的 `关闭` 仍是文件名；`把 页脚标题 关闭`、`把页脚标题关闭`、`将 黑白省墨 打开` 和 `turn 页脚标题 off` 是动词在标签后面的同一复选框，不是名为「把」的文件；单独的 `把 页脚标题`（后面没有动词）仍把「把」当作文件名；`页脚标题关闭`、`页脚标题 关掉` 和 `页脚标题off` 是动词在标签后面、前面没有「把」的同一复选框，会取消页脚标题，不是文件名，也不会留在勾选状态；`黑白省墨打开` 会勾选黑白省墨；整句 `layout 3，页脚标题关闭` 会取消勾选，不会静默留在开启；单独的 `关掉` 仍是文件名；`showFooterTitlefalse` 和 `offshowFooterTitle` 是没有分隔符的同一复选框，不是文件名；整句 `layout 3，showFooterTitlefalse` 会取消勾选，不会静默留在开启；单独的 `showFooterTitleoffline` 和 `offline` 仍是文件名；整句 `layout 3，showFooterTitleoffline` 不会被丢掉，也不会在页脚仍开启时打印；`monooff` 同样会取消黑白省墨；`no-mono` 仍是那个 flag；`showFooterTitle-off` 和 `setting-footer-title-off` 是动词前有连字符的同一复选框，不是文件名；整句 `layout 3，showFooterTitle-off` 会取消勾选，不会静默留在开启；单独的 `showFooterTitle-offline` 仍是文件名；整句 `layout 3，showFooterTitle-offline` 不会被丢掉，也不会在页脚仍开启时打印；`mono-off` 同样会取消黑白省墨；`off-showFooterTitle` 是标签前有连字符的同一复选框，会取消页脚标题，不是文件名；整句 `layout 3，off-showFooterTitle` 会取消勾选，不会静默留在开启；`no-mono` 仍是那个 flag，不是 `no` 加标签；`offline` 和 `off-line` 仍是文件名；整句 `layout 3，off-showFooterTitlexyz` 不会被丢掉，也不会在页脚仍开启时打印；拆开的 `showFooterTitle -off` 也是同一复选框，不是 `-o` 加上名为 ff 的文件，也不会把页脚留在勾选；整句 `layout 3，showFooterTitle -off` 会取消勾选；单独的 `-off` 仍是 `-o ff`；连字符单独成词的 `showFooterTitle - off` 也是同一复选框，不是未知选项 `-`，也不会把页脚留在勾选；整句 `layout 3，showFooterTitle - off` 会取消勾选；前面没有标签的 `- off` 仍是未知选项；拆开的 `showFooterTitle -offline` 仍是文件名，不是输出 `ffline`；`offline-showFooterTitle` 不是 `off` 加标签。整句 `layout 3，offline-showFooterTitle` 不会被丢掉，也不会在页脚仍开启时打印。单独的 `offline-showFooterTitle` 仍是文件名。单独的 `offline` 仍是文件名。整句 `layout 3，offline-showFooterTitlexyz` 也不会被丢掉；`offlineshowFooterTitle` 不是 `off` 直接粘上标签，中间没有连字符。整句 `layout 3，offlineshowFooterTitle` 不会被丢掉，也不会在页脚仍开启时打印。单独的 `offlineshowFooterTitle` 仍是文件名。整句 `layout 3，offlineshowFooterTitlexyz` 也不会被丢掉；`off-line-showFooterTitle` 不是 `off` 加标签。连字符紧挨着动词，然后是杂字，然后才是标签。整句 `layout 3，off-line-showFooterTitle` 不会被丢掉，也不会在页脚仍开启时打印。单独的 `off-line-showFooterTitle` 仍是文件名。整句 `layout 3，off-line-showFooterTitlexyz` 也不会被丢掉。`off-lineshowFooterTitle` 没有第二个连字符。整句 `layout 3，off-lineshowFooterTitle` 也不会被丢掉，也不会在页脚仍开启时打印。`off-line` 和 `off-monochrome` 仍是文件名；`3个字/页` 和工作台分组 `aria-label`「每页字数 3」也是这个排版说法（`jobs[].phrases`），不是缺失的文件名；单独的「每页字数」是未完成的排版，不是第二个任务。`chars per page 3`、`3 chars per page` 和 `--chars per page 3` 是这个排版说法（`jobs[].phrases`），不是 `--chars` 筛选，也不是名为 page 的文件；`--chars 一,二` 仍然只印这些字；单独的 `chars per`（后面没有 page）仍是筛选；`跑端到端测试生成 PDF，layout 3` 同样是这个任务。`printer/spec/print-job.example.json` 本身就是 CLI 参数（等价于 `--config`），不是字库；只写文件名 `print-job.example.json` 也是这个任务文件。`hanzi-1000-v6.json` 这种字库 JSON 仍然是输入，且只写这个文件名就会找到应用发布的示例字库（任意 cwd；cwd 里的同名文件优先）。省略 layout 时，错误 JSON 里带上应用自己的 `jobs` 表（含绝对 `argv`）。不要把 `--limit`、`--output`、`--dry-run` 直接接在 `npm run` 后面：npm 会拒绝 `--limit`；`--dry-run` 会被 npm 吃掉，CLI 据此只做预览、不写 PDF。
+
+`printer/` 开头的输入和输出路径都从仓库根目录解析，不依赖当前工作目录（在 `printer/` 里执行也不会写成 `printer/printer/output`）。`-o out.pdf` 这种不带 `printer/` 前缀的相对路径仍相对 cwd。
+
+对人说「layout 3」「layout 2」、工作台按钮「3 字/页」、「3个字/页」、分组标签「每页字数 3」、「3 per page」、「3 chars per page」、「chars per page 3」或「three Chinese characters on the page」时，运行 `npm run print:layout-3` 或 `--describe` 里的 `argv`（`jobs[].phrases` 列出这些说法）。`chars per page 3` 不是 `--chars` 筛选。若仍沿用旧指令去跑端到端测试，`npm run test:e2e layout 3` 会打印同一个已发布任务；把整句 `run the end-to-end test to generate the PDF, layout 3` 当作一个参数同样会打印，不会去找同名文件。拆成 `run the end-to-end test to generate the PDF, layout 3` 多个参数也一样，逗号粘在 `PDF,` 上不会变成缺失的文件名。不带 layout 的 `npm run test:e2e` 才是视觉回归。`npm run test:e2e:cli` 用示例字库对照原来的浏览器点击布局、再 `page.pdf()` 的结果。
+
 ### 生产与使用环境（侧重可用性、离线能力与加载性能）
 
 - **生成紧凑版生产资源包**：
@@ -134,7 +180,8 @@ printer/
   npm --prefix printer start
   # 默认监听 http://127.0.0.1:4173/printer/index.html
   ```
-- **运行单元测试与 Chromium 真实打印 E2E 验证**：
+- **打印字帖（不是 E2E）**：在仓库根目录运行 `npm run print:layout-3`（或 `print:layout-2`）。任意目录用 `--describe` 的绝对 `argv`。不要把 CLI flag 接在 npm 后面。
+- **运行单元测试与 Chromium 视觉回归（不要用它来生成要交付的 PDF）**：
   ```bash
   npm --prefix printer test
   npm --prefix printer run test:e2e

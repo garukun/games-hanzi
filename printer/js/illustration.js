@@ -71,15 +71,8 @@ export function isVendoredEmoji(id) {
  */
 export function resolveIllustration(char, customImage = null, map = defaultIllustrationMap, assetBase = './assets/emoji/') {
   const spec = normalizeImageSpec(customImage) || normalizeImageSpec(map?.[char]);
-  if (!spec) {
-    return { type: 'glyph', char, count: 1 };
-  }
-  if (spec.type === 'upload') {
-    return { type: 'upload', char, count: 1, src: spec.src };
-  }
-  if (spec.type === 'glyph') {
-    return { type: 'glyph', char, count: 1 };
-  }
+  if (!spec || spec.type === 'glyph') return { type: 'glyph', char, count: 1 };
+  if (spec.type === 'upload') return { type: 'upload', char, count: 1, src: spec.src };
   const count = Math.min(10, Math.max(1, Number(spec.count) || 1));
   return {
     type: 'emoji',

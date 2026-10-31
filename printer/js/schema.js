@@ -28,22 +28,20 @@ export function hashString(str) {
 /** Normalize an image descriptor from either compact (`{e, n, g}`) or verbose (`{emoji, count, glyph, src}`) form. */
 export function normalizeImageSpec(img) {
   if (!img || typeof img !== 'object') return null;
-  if (typeof img.src === 'string' && img.src.trim()) {
-    return { type: 'upload', src: img.src.trim() };
-  }
+  const src = trimmedString(img.src);
+  if (src) return { type: 'upload', src };
   if (img.glyph || img.g) {
     return { type: 'glyph', glyph: true };
   }
-  const rawId = img.id || img.emoji || img.e;
-  if (typeof rawId === 'string' && rawId.trim()) {
+  const rawId = trimmedString(img.id || img.emoji || img.e);
+  if (rawId) {
     const id = rawId
-      .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '');
     const count = Number(img.count ?? img.n ?? 1);
     const n = Number.isFinite(count) ? Math.min(10, Math.max(1, Math.round(count))) : 1;
-    return n > 1 ? { type: 'emoji', id, count: n } : { type: 'emoji', id, count: 1 };
+    return { type: 'emoji', id, count: n };
   }
   return null;
 }
@@ -74,36 +72,44 @@ export function serializeImageSpec(spec) {
  *   rawCount: number
  * }}
  */
+function trimmedString(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function trimmedStrings(list) {
+  return list.map(trimmedString).filter(Boolean);
+}
+
+/** Early failure. `fileHash: 'invalid'` so overrides are not keyed to a bad upload. */
+function invalidDataset(code, message, meta = {}) {
+  return {
+    ok: false,
+    meta,
+    groups: [],
+    characters: [],
+    issues: [{ level: 'error', code, message }],
+    fileHash: 'invalid',
+    rawCount: 0,
+  };
+}
+
 export function parseDataset(input) {
   const issues = [];
+  const issue = (level, code, message, char) => {
+    issues.push(char == null ? { level, code, message } : { level, code, char, message });
+  };
   let rawObj = null;
 
   if (typeof input === 'string') {
     try {
       rawObj = JSON.parse(input);
     } catch (err) {
-      return {
-        ok: false,
-        meta: {},
-        groups: [],
-        characters: [],
-        issues: [{ level: 'error', code: 'INVALID_JSON', message: `JSON 格式错误：${err.message}` }],
-        fileHash: 'invalid',
-        rawCount: 0,
-      };
+      return invalidDataset('INVALID_JSON', `JSON 格式错误：${err.message}`);
     }
   } else if (input && typeof input === 'object') {
     rawObj = input;
   } else {
-    return {
-      ok: false,
-      meta: {},
-      groups: [],
-      characters: [],
-      issues: [{ level: 'error', code: 'INVALID_JSON', message: '输入数据为空或不是有效 JSON 对象' }],
-      fileHash: 'invalid',
-      rawCount: 0,
-    };
+    return invalidDataset('INVALID_JSON', '输入数据为空或不是有效 JSON 对象');
   }
 
   const meta = rawObj.meta && typeof rawObj.meta === 'object' ? { ...rawObj.meta } : { title: '汉字描红字帖' };
@@ -113,15 +119,7 @@ export function parseDataset(input) {
   } else if (Array.isArray(rawObj.characters)) {
     rawGroups = [{ category: meta.title || '默认分组', characters: rawObj.characters }];
   } else {
-    return {
-      ok: false,
-      meta,
-      groups: [],
-      characters: [],
-      issues: [{ level: 'error', code: 'MISSING_GROUPS', message: '缺少 groups 或 characters 字段' }],
-      fileHash: 'invalid',
-      rawCount: 0,
-    };
+    return invalidDataset('MISSING_GROUPS', '缺少 groups 或 characters 字段', meta);
   }
 
   const seen = new Map();
@@ -132,43 +130,33 @@ export function parseDataset(input) {
 
   rawGroups.forEach((g, gi) => {
     if (!g || typeof g !== 'object') return;
-    const category = typeof g.category === 'string' && g.category.trim() ? g.category.trim() : `第 ${gi + 1} 组`;
+    const category = trimmedString(g.category) || `第 ${gi + 1} 组`;
     const list = Array.isArray(g.characters) ? g.characters : [];
     if (!Array.isArray(g.characters)) {
-      issues.push({ level: 'warning', code: 'MISSING_GROUP_CHARS', message: `分组「${category}」缺少 characters 数组` });
+      issue('warning', 'MISSING_GROUP_CHARS', `分组「${category}」缺少 characters 数组`);
     }
     const groupChars = [];
 
     list.forEach((item, ci) => {
       rawCount++;
       if (!item || typeof item !== 'object') {
-        issues.push({ level: 'error', code: 'INVALID_CHAR_ITEM', message: `${category} 第 ${ci + 1} 项不是有效对象` });
+        issue('error', 'INVALID_CHAR_ITEM', `${category} 第 ${ci + 1} 项不是有效对象`);
         return;
       }
-      const ch = typeof item.char === 'string' ? item.char.trim() : '';
+      const ch = trimmedString(item.char);
       if (!ch) {
-        issues.push({ level: 'error', code: 'MISSING_CHAR', message: `${category} 第 ${ci + 1} 项缺少 char 字段` });
+        issue('error', 'MISSING_CHAR', `${category} 第 ${ci + 1} 项缺少 char 字段`);
         return;
       }
       const glyphs = [...ch];
       const han = glyphs[0];
       if (glyphs.length !== 1) {
-        issues.push({
-          level: 'warning',
-          code: 'MULTI_CHAR',
-          char: han,
-          message: `字符「${ch}」长度超过 1，已取首字「${han}」`,
-        });
+        issue('warning', 'MULTI_CHAR', `字符「${ch}」长度超过 1，已取首字「${han}」`, han);
       }
 
       if (seen.has(han)) {
         duplicateChars.add(han);
-        issues.push({
-          level: 'warning',
-          code: 'DUPLICATE_CHAR',
-          char: han,
-          message: `重复汉字「${han}」（首次出现于 ${seen.get(han)}，再次出现于 ${category}）`,
-        });
+        issue('warning', 'DUPLICATE_CHAR', `重复汉字「${han}」（首次出现于 ${seen.get(han)}，再次出现于 ${category}）`, han);
         return;
       }
 
@@ -177,50 +165,26 @@ export function parseDataset(input) {
       }
       seen.set(han, category);
 
-      const pinyin = typeof item.pinyin === 'string' ? item.pinyin.trim() : '';
-      if (!pinyin) {
-        issues.push({
-          level: 'warning',
-          code: 'MISSING_PINYIN',
-          char: han,
-          message: `汉字「${han}」缺少拼音（pinyin）字段`,
-        });
-      }
+      const pinyin = trimmedString(item.pinyin);
+      if (!pinyin) issue('warning', 'MISSING_PINYIN', `汉字「${han}」缺少拼音（pinyin）字段`, han);
 
       let words = [];
       if (Array.isArray(item.words)) {
-        words = item.words.map((w) => (typeof w === 'string' ? w.trim() : '')).filter(Boolean);
+        words = trimmedStrings(item.words);
       } else {
-        issues.push({
-          level: 'warning',
-          code: 'MISSING_WORDS',
-          char: han,
-          message: `汉字「${han}」缺少组词（words）数组`,
-        });
+        issue('warning', 'MISSING_WORDS', `汉字「${han}」缺少组词（words）数组`, han);
       }
       if (words.length === 0) {
-        issues.push({
-          level: 'warning',
-          code: 'EMPTY_WORDS',
-          char: han,
-          message: `汉字「${han}」没有任何组词`,
-        });
+        issue('warning', 'EMPTY_WORDS', `汉字「${han}」没有任何组词`, han);
       } else {
         const badWords = words.filter((w) => !w.includes(han));
         if (badWords.length > 0) {
-          issues.push({
-            level: 'warning',
-            code: 'WORD_MISSING_CHAR',
-            char: han,
-            message: `汉字「${han}」的组词未包含本字：${badWords.join('、')}`,
-          });
+          issue('warning', 'WORD_MISSING_CHAR', `汉字「${han}」的组词未包含本字：${badWords.join('、')}`, han);
         }
       }
 
-      const displayWords = Array.isArray(item.display_words)
-        ? item.display_words.map((w) => (typeof w === 'string' ? w.trim() : '')).filter(Boolean)
-        : undefined;
-      const radical = typeof item.radical === 'string' && item.radical.trim() ? item.radical.trim() : undefined;
+      const displayWords = Array.isArray(item.display_words) ? trimmedStrings(item.display_words) : undefined;
+      const radical = trimmedString(item.radical) || undefined;
       const strokes =
         Number.isFinite(Number(item.strokes)) && Number(item.strokes) > 0 ? Math.round(Number(item.strokes)) : undefined;
       const image = normalizeImageSpec(item.image);
@@ -254,9 +218,7 @@ export function parseDataset(input) {
     });
   }
 
-  if (characters.length === 0) {
-    issues.push({ level: 'error', code: 'EMPTY_DATASET', message: '未解析到任何有效汉字' });
-  }
+  if (characters.length === 0) issue('error', 'EMPTY_DATASET', '未解析到任何有效汉字');
 
   const canonical = JSON.stringify({
     t: meta.title || '',

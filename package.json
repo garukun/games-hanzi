@@ -11,7 +11,14 @@
     "test:printer": "node --test printer/tests/",
     "print:assets": "node printer/scripts/print-assets.mjs",
     "print:dev": "node printer/scripts/serve.mjs",
-    "test:e2e": "node --test printer/e2e/print.spec.mjs"
+    "print": "node printer/scripts/print-pdf.mjs",
+    "print:pdf": "node printer/scripts/print-pdf.mjs",
+    "print:layout-1": "node printer/scripts/print-pdf.mjs layout 1",
+    "print:layout-2": "node printer/scripts/print-pdf.mjs layout 2",
+    "print:layout-3": "node printer/scripts/print-pdf.mjs layout 3",
+    "print:layout-4": "node printer/scripts/print-pdf.mjs layout 4",
+    "test:e2e": "node printer/scripts/print-pdf.mjs --e2e",
+    "test:e2e:cli": "node --test printer/e2e/cli-print.spec.mjs"
   },
   "devDependencies": {
     "@napi-rs/canvas": "^1.0.13",

@@ -1,6 +1,38 @@
 /**
  * End-to-End PDF Verification Suite for the Hanzi Practice-Sheet Workbench.
  *
+ * This file is a visual regression gate, not a PDF generator. To print a sheet,
+ * run `npm run print:layout-3` from the repo root, or the absolute jobs[].argv
+ * from `node printer/scripts/print-pdf.mjs --describe` (works from any cwd).
+ * `npm run test:e2e layout 3` (or the workbench label `3 字/页`, `3 per page`,
+ * or `three Chinese characters on the page`) prints that
+ * published job instead of this suite. So does one quoted argument:
+ * `run the end-to-end test to generate the PDF, layout 3`. Options in that
+ * sentence (`--limit 6`, `cols 5`, `每行 5`) are not a filename. The same words as
+ * separate argv (`layout 3 limit 6`, `3 字/页 每行 5`, `黑白省墨`) are options too.
+ * The workbench 序号 picker (`序号 1-12`, `选取 1 - 6`) is --range, not a filename.
+ * That hyphen is the picker, not an option. A bare 选取 does not change the selection.
+ * `--no-mono` and `--no-footer-title` are the workbench checkboxes as real flags, not unknown options.
+ * `--no-footer-title` unchecks 页脚标题 (default on). `--footer-title false` and `setting-footer-title false`
+ * uncheck it too; they are not a filename and do not leave the box checked. A bare `false` is still a filename.
+ * Separate argv `showFooterTitle -off` is that checkbox, not `-o` plus a file named `ff`, and it does not leave the box checked.
+ * A quoted `layout 3，showFooterTitle -off` unchecks the box too. A bare `-off` is still `-o ff`.
+ * Separate argv `showFooterTitle - off`, with the hyphen as its own word, is that same checkbox, not an unknown option `-`, and it does not leave the box checked.
+ * A quoted `layout 3，showFooterTitle - off` unchecks the box too. A bare `- off` with no label is still an unknown option.
+ * A quoted `layout 3，showFooterTitle-offline` is not dropped and does not print with the footer left on.
+ * Separate argv `showFooterTitle-offline` is still a filename.
+ * `3个字/页` and the workbench aria-label `每页字数 3` are that layout phrase, not a missing filename.
+ * `每页字数` with no count is an incomplete layout, not a second job.
+ * `页脚标题关闭` and `页脚标题 关掉` uncheck 页脚标题 with no 把. They are not a filename.
+ * A quoted `layout 3，页脚标题关闭` unchecks the box; it does not leave it on. A bare `关掉` is still a filename.
+ * `chars per page 3`, `3 chars per page`, and `--chars per page 3` are the layout phrase, not a --chars filter
+ * and not a file named page. `--chars 一,二` still selects those characters. `chars per` without page is still the filter.
+ * A checkbox flag with no layout is still this printer, not the suite.
+ * With no layout,
+ * `npm run test:e2e` still runs this file. Dataset defaults to
+ * printer/spec/data/hanzi-1000-v6.json.
+ * Do not append --limit or --dry-run to the npm script.
+ *
  * Drives the real browser UI via Playwright, prints to actual US Letter PDFs via
  * `page.pdf()`, and verifies the resulting PDFs using `pdfjs-dist` (text, page size,
  * page count, embedded fonts) and rasterized pixel analysis (illustration presence,
@@ -14,6 +46,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { PDF_EXPORT } from '../js/print-config.js';
 import { startStaticServer } from '../scripts/serve.mjs';
 import {
   inspectPdfTextAndMeta,
@@ -108,11 +141,7 @@ async function uploadJsonDataset(page, dataObj, filename = 'fixture.json') {
 async function exportPdfBuffer(page, outPath = null) {
   await page.evaluate(() => window.__hanziPrintPrepare());
   await page.waitForFunction(() => document.body.dataset.printReady === 'true');
-  const pdfBuf = await page.pdf({
-    format: 'Letter',
-    printBackground: true,
-    preferCSSPageSize: true,
-  });
+  const pdfBuf = await page.pdf(PDF_EXPORT);
   if (outPath) {
     writeFileSync(outPath, pdfBuf);
   }

@@ -40,14 +40,16 @@ async function initApp() {
   await loadIllustrationAssets();
 
   // Helper to ingest a raw JSON string or object
-  async function ingestDataset(rawInput, { selectFirstN = null } = {}) {
+  async function ingestDataset(rawInput, { selectFirstN = null, selectChars = null } = {}) {
     document.body.dataset.datasetReady = 'false';
     const t0 = performance.now();
     const doc = await store.loadDataset(rawInput);
     if (doc.characters.length > 0) {
       await ensureHanziData(doc.characters.map((c) => c.char));
     }
-    if (selectFirstN && doc.characters.length > selectFirstN) {
+    if (Array.isArray(selectChars) && selectChars.length > 0) {
+      store.setSelection(selectChars);
+    } else if (selectFirstN && doc.characters.length > selectFirstN) {
       store.setSelection(doc.characters.slice(0, selectFirstN).map((c) => c.char));
     }
     const elapsedMs = Math.round(performance.now() - t0);
@@ -391,8 +393,15 @@ async function initApp() {
     printController.triggerPrint();
   });
 
-  // Load default dataset on startup
-  await loadDefaultDataset();
+  // The print CLI sets window.__HANZI_CLI__ (or ?cli=1) and ingests the
+  // requested JSON itself, so it does not race the default 1000-character fetch.
+  document.body.dataset.appReady = 'true';
+  const cliBoot = new URLSearchParams(location.search).has('cli') || window.__HANZI_CLI__ === true;
+  if (cliBoot) {
+    document.body.dataset.cliBoot = 'true';
+  } else {
+    await loadDefaultDataset();
+  }
 }
 
 initApp();

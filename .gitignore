@@ -4,3 +4,4 @@ node_modules/
 
 printer/scripts/.cache/
 printer/e2e/output/
+printer/output/

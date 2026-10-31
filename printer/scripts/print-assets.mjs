@@ -21,15 +21,15 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { cleanStrokeMedians, smoothMedianToPath } from '../js/hanzi-data.js';
+
+export { cleanStrokeMedians, smoothMedianToPath };
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CACHE = join(root, 'scripts', '.cache');
 const OUT = root;
 const require = createRequire(import.meta.url);
 mkdirSync(CACHE, { recursive: true });
-
-const SHARD_BITS = 6; // codepoint >> 6  => 64 characters per shard
-export const shardKey = (cp) => (cp >> SHARD_BITS).toString(16);
 
 /* ----------------------------------------------------------------- helpers */
 
@@ -90,87 +90,6 @@ function v5Chars() {
 const stripVS = (s) => s.replace(/\uFE0F/g, '');
 
 /* ------------------------------------------------------------------ hanzi */
-
-export function cleanStrokeMedians(pts) {
-  if (!Array.isArray(pts) || pts.length <= 2) return pts || [];
-  const p = pts.map(([x, y]) => [Number(x), Number(y)]);
-
-  for (let pass = 0; pass < 2 && p.length >= 3; pass++) {
-    const dx0 = p[1][0] - p[0][0];
-    const dy0 = p[1][1] - p[0][1];
-    const l0 = Math.hypot(dx0, dy0);
-    let refIdx = 2;
-    while (refIdx < p.length - 1 && Math.hypot(p[refIdx][0] - p[1][0], p[refIdx][1] - p[1][1]) < 80) {
-      refIdx++;
-    }
-    const dxRef = p[refIdx][0] - p[1][0];
-    const dyRef = p[refIdx][1] - p[1][1];
-    const lRef = Math.hypot(dxRef, dyRef);
-    if (l0 < 85 && lRef > l0 * 1.2 && l0 > 0 && lRef > 0) {
-      const cos = (dx0 * dxRef + dy0 * dyRef) / (l0 * lRef);
-      if (cos < 0.96) {
-        const ux = dxRef / lRef;
-        const uy = dyRef / lRef;
-        const along = Math.max(0, dx0 * ux + dy0 * uy);
-        p[1] = [p[1][0] - ux * along * 0.45, p[1][1] - uy * along * 0.45];
-        p.shift();
-      }
-    }
-  }
-
-  for (let pass = 0; pass < 2 && p.length >= 3; pass++) {
-    const n = p.length;
-    const dx0 = p[n - 1][0] - p[n - 2][0];
-    const dy0 = p[n - 1][1] - p[n - 2][1];
-    const l0 = Math.hypot(dx0, dy0);
-    let refIdx = n - 3;
-    while (refIdx > 0 && Math.hypot(p[n - 2][0] - p[refIdx][0], p[n - 2][1] - p[refIdx][1]) < 80) {
-      refIdx--;
-    }
-    const dxRef = p[n - 2][0] - p[refIdx][0];
-    const dyRef = p[n - 2][1] - p[refIdx][1];
-    const lRef = Math.hypot(dxRef, dyRef);
-    if (l0 < 95 && lRef > l0 * 1.25 && l0 > 0 && lRef > 0) {
-      const cos = (dx0 * dxRef + dy0 * dyRef) / (l0 * lRef);
-      if (cos > 0.55 && cos < 0.96) {
-        const ux = dxRef / lRef;
-        const uy = dyRef / lRef;
-        const along = Math.max(0, dx0 * ux + dy0 * uy);
-        p[n - 2] = [p[n - 2][0] + ux * along * 0.45, p[n - 2][1] + uy * along * 0.45];
-        p.pop();
-      }
-    }
-  }
-  return p;
-}
-
-export function smoothMedianToPath(pts) {
-  const p = cleanStrokeMedians(pts);
-  if (!p || !p.length) return '';
-  if (p.length === 1) return `M ${Math.round(p[0][0])} ${Math.round(p[0][1])}`;
-  if (p.length === 2) {
-    return `M ${Math.round(p[0][0])} ${Math.round(p[0][1])} L ${Math.round(p[1][0])} ${Math.round(p[1][1])}`;
-  }
-  let d = `M ${Math.round(p[0][0])} ${Math.round(p[0][1])}`;
-  for (let i = 1; i < p.length - 1; i++) {
-    const vx1 = p[i][0] - p[i - 1][0];
-    const vy1 = p[i][1] - p[i - 1][1];
-    const vx2 = p[i + 1][0] - p[i][0];
-    const vy2 = p[i + 1][1] - p[i][1];
-    const l1 = Math.hypot(vx1, vy1) || 1;
-    const l2 = Math.hypot(vx2, vy2) || 1;
-    const cos = (vx1 * vx2 + vy1 * vy2) / (l1 * l2);
-    if (cos < 0.65) {
-      d += ` L ${Math.round(p[i][0])} ${Math.round(p[i][1])}`;
-    } else {
-      const mx = Math.round((p[i][0] + p[i + 1][0]) / 2);
-      const my = Math.round((p[i][1] + p[i + 1][1]) / 2);
-      d += ` Q ${Math.round(p[i][0])} ${Math.round(p[i][1])} ${mx} ${my}`;
-    }
-  }
-  d += ` L ${Math.round(p[p.length - 1][0])} ${Math.round(p[p.length - 1][1])}`;
-  return d;
-}
 
 async function buildHanzi({ pretty = false } = {}) {
   console.log('[strokes] loading Make Me a Hanzi data…');

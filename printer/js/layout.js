@@ -46,32 +46,27 @@ export const SPECS = {
 
 export const PER_PAGE_OPTIONS = [1, 2, 3, 4];
 
+/** Columns, rows, and gap (mm) for each per-page layout. */
+const SLOT_GRID = {
+  1: { cols: 1, rows: 1, gap: 0 },
+  2: { cols: 2, rows: 1, gap: 6 },
+  3: { cols: 1, rows: 3, gap: 5 },
+  4: { cols: 2, rows: 2, gap: 6 },
+};
+
 /** Where each character "unit" sits inside the page body. */
 export function unitSlots(perPage) {
-  const H = UNITS_H;
-  const W = BODY.w;
-  switch (perPage) {
-    case 1:
-      return [{ x: 0, y: 0, w: W, h: H }];
-    case 2: {
-      const gap = 6;
-      const w = (W - gap) / 2;
-      return [0, 1].map((i) => ({ x: i * (w + gap), y: 0, w, h: H }));
-    }
-    case 3: {
-      const gap = 5;
-      const h = (H - 2 * gap) / 3;
-      return [0, 1, 2].map((i) => ({ x: 0, y: i * (h + gap), w: W, h }));
-    }
-    case 4: {
-      const gap = 6;
-      const w = (W - gap) / 2;
-      const h = (H - gap) / 2;
-      return [0, 1, 2, 3].map((i) => ({ x: (i % 2) * (w + gap), y: Math.floor(i / 2) * (h + gap), w, h }));
-    }
-    default:
-      throw new RangeError(`unsupported perPage ${perPage}`);
-  }
+  const spec = SLOT_GRID[perPage];
+  if (!spec) throw new RangeError(`unsupported perPage ${perPage}`);
+  const { cols, rows, gap } = spec;
+  const w = (BODY.w - gap * (cols - 1)) / cols;
+  const h = (UNITS_H - gap * (rows - 1)) / rows;
+  return Array.from({ length: cols * rows }, (_, i) => ({
+    x: (i % cols) * (w + gap),
+    y: Math.floor(i / cols) * (h + gap),
+    w,
+    h,
+  }));
 }
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));

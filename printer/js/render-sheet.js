@@ -17,6 +17,13 @@ import {
   themeFor,
 } from './layout.js';
 
+/** `+(n).toFixed(2)`, not layout.js `Math.round(n * 100) / 100`. PDF coords depend on that. */
+const n2 = (n) => +n.toFixed(2);
+const KAI_FONT = "'LXGW WenKai','Kaiti SC',STKaiti,KaiTi,serif";
+const HANZI_XFORM = 'scale(1,-1) translate(0,-900)';
+const GRID_HAIR = 'stroke="#cbd5e1" stroke-width="0.22" stroke-dasharray="1.3,1.0"';
+const TRACE_INK = ' fill="#e5e8ed" stroke="#9399a3" stroke-width="18" stroke-dasharray="28,44" stroke-linecap="round" stroke-linejoin="round"';
+
 export function escapeHtml(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;')
@@ -25,13 +32,33 @@ export function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+function pathTags(ds, attrs = '') {
+  const extra = attrs ? ` ${attrs}` : '';
+  return ds.map((d) => `<path d="${d}"${extra}/>`).join('');
+}
+
+function hanziSymbol(id, inner) {
+  return `<symbol id="${id}" viewBox="0 0 1024 1024">${inner}</symbol>`;
+}
+
+function hanziGroup(inner, attrs = '') {
+  return `<g transform="${HANZI_XFORM}"${attrs}>${inner}</g>`;
+}
+
+function kaiText(char, attrs = '') {
+  return `<text x="512" y="800" text-anchor="middle" font-family="${KAI_FONT}" font-size="820"${attrs}>${escapeHtml(char)}</text>`;
+}
+
+function boxPos(rect) {
+  return `left:${rect.x}mm;top:${rect.y}mm;width:${rect.w}mm;height:${rect.h}mm`;
+}
+
 /** Build the reusable `<symbol>` markup for a character in 1024×1024 coordinate space. */
 function buildCharSymbol(symId, item) {
   if (Array.isArray(item.strokePaths) && item.strokePaths.length > 0) {
-    const paths = item.strokePaths.map((d) => `<path d="${d}"/>`).join('');
-    return `<symbol id="${symId}" viewBox="0 0 1024 1024"><g transform="scale(1,-1) translate(0,-900)">${paths}</g></symbol>`;
+    return hanziSymbol(symId, hanziGroup(pathTags(item.strokePaths)));
   }
-  return `<symbol id="${symId}" viewBox="0 0 1024 1024"><text x="512" y="800" text-anchor="middle" font-family="'LXGW WenKai','Kaiti SC',STKaiti,KaiTi,serif" font-size="820">${escapeHtml(item.char)}</text></symbol>`;
+  return hanziSymbol(symId, kaiText(item.char));
 }
 
 /** Build the light-grey dashed tracing `<symbol>` markup in 1024×1024 coordinate space. */
@@ -40,17 +67,13 @@ function buildTraceSymbol(traceSymId, item) {
   const hasMedians = Array.isArray(item.medianPaths) && item.medianPaths.length > 0;
   if (hasMedians) {
     const silhouette = hasStrokes
-      ? `<g class="trace-silhouette" fill="#e5e8ed">${item.strokePaths.map((d) => `<path d="${d}"/>`).join('')}</g>`
+      ? `<g class="trace-silhouette" fill="#e5e8ed">${pathTags(item.strokePaths)}</g>`
       : '';
-    const mPaths = item.medianPaths.map((d) => `<path d="${d}"/>`).join('');
-    const centerline = `<g class="trace-centerline" fill="none" stroke="#9399a3" stroke-width="28" stroke-dasharray="28,54" stroke-linecap="round" stroke-linejoin="round">${mPaths}</g>`;
-    return `<symbol id="${traceSymId}" viewBox="0 0 1024 1024"><g transform="scale(1,-1) translate(0,-900)">${silhouette}${centerline}</g></symbol>`;
+    const centerline = `<g class="trace-centerline" fill="none" stroke="#9399a3" stroke-width="28" stroke-dasharray="28,54" stroke-linecap="round" stroke-linejoin="round">${pathTags(item.medianPaths)}</g>`;
+    return hanziSymbol(traceSymId, hanziGroup(silhouette + centerline));
   }
-  if (hasStrokes) {
-    const paths = item.strokePaths.map((d) => `<path d="${d}"/>`).join('');
-    return `<symbol id="${traceSymId}" viewBox="0 0 1024 1024"><g transform="scale(1,-1) translate(0,-900)" fill="#e5e8ed" stroke="#9399a3" stroke-width="18" stroke-dasharray="28,44" stroke-linecap="round" stroke-linejoin="round">${paths}</g></symbol>`;
-  }
-  return `<symbol id="${traceSymId}" viewBox="0 0 1024 1024"><text x="512" y="800" text-anchor="middle" font-family="'LXGW WenKai','Kaiti SC',STKaiti,KaiTi,serif" font-size="820" fill="#e5e8ed" stroke="#9399a3" stroke-width="18" stroke-dasharray="28,44" stroke-linecap="round" stroke-linejoin="round">${escapeHtml(item.char)}</text></symbol>`;
+  if (hasStrokes) return hanziSymbol(traceSymId, hanziGroup(pathTags(item.strokePaths), TRACE_INK));
+  return hanziSymbol(traceSymId, kaiText(item.char, TRACE_INK));
 }
 
 /** Render the illustration card interior (`.unit-art`) for `emoji`, `glyph`, or `upload`. */
@@ -68,10 +91,10 @@ function renderIllustrationArt(item, geom, theme, symId, gradId) {
     const padFactor = (ill.count || 1) > 1 ? 0.74 : 0.88;
     innerHtml = cells
       .map((cell, idx) => {
-        const iconSize = +(cell.s * padFactor).toFixed(2);
-        const offset = +((cell.s - iconSize) / 2).toFixed(2);
-        const left = +(cell.x + offset).toFixed(2);
-        const top = +(cell.y + offset).toFixed(2);
+        const iconSize = n2(cell.s * padFactor);
+        const offset = n2((cell.s - iconSize) / 2);
+        const left = n2(cell.x + offset);
+        const top = n2(cell.y + offset);
         return `<img class="art-emoji-icon" data-emoji-id="${escapeHtml(ill.id)}" data-emoji-index="${idx}" src="${escapeHtml(ill.src)}" alt="${escapeHtml(item.char)}" style="left:${left}%;top:${top}%;width:${iconSize}%;height:${iconSize}%;" decoding="sync" loading="eager" />`;
       })
       .join('');
@@ -92,7 +115,7 @@ function renderIllustrationArt(item, geom, theme, symId, gradId) {
          data-illustration-slot="${escapeHtml(item.char)}"
          data-illustration-type="${escapeHtml(ill.type)}"
          data-illustration-count="${ill.count || 1}"
-         style="left:${geom.art.x}mm;top:${geom.art.y}mm;width:${artW}mm;height:${artH}mm;">
+         style="${boxPos(geom.art)};">
       <div class="art-stage" style="left:${stageLeft}mm;top:${stageTop}mm;width:${squareSide}mm;height:${squareSide}mm;">
         ${innerHtml}
       </div>
@@ -105,8 +128,8 @@ function renderStrokeRibbon(item, geom, theme) {
   const labelW = spec.labelW;
   const padX = 1.2;
   const padY = 1.1;
-  const innerW = +(geom.stroke.w - labelW - padX * 1.5).toFixed(2);
-  const innerH = +(geom.stroke.h - padY * 2).toFixed(2);
+  const innerW = n2(geom.stroke.w - labelW - padX * 1.5);
+  const innerH = n2(geom.stroke.h - padY * 2);
 
   const hasPaths = Array.isArray(item.strokePaths) && item.strokePaths.length > 0;
   const count = hasPaths ? item.strokePaths.length : Math.max(1, item.strokes || 1);
@@ -116,12 +139,9 @@ function renderStrokeRibbon(item, geom, theme) {
   let stepsHtml = '';
   if (hasPaths) {
     for (let k = 1; k <= count; k++) {
-      const prevPaths = item.strokePaths
-        .slice(0, k - 1)
-        .map((d) => `<path d="${d}" fill="#94a3b8"/>`)
-        .join('');
-      const curPath = `<path d="${item.strokePaths[k - 1]}" fill="${theme.main}"/>`;
-      stepsHtml += `<svg class="stroke-step" data-step="${k}" viewBox="0 0 1024 1024" style="width:${stepSize}mm;height:${stepSize}mm;"><g transform="scale(1,-1) translate(0,-900)">${prevPaths}${curPath}</g></svg>`;
+      const prevPaths = pathTags(item.strokePaths.slice(0, k - 1), 'fill="#94a3b8"');
+      const curPath = pathTags([item.strokePaths[k - 1]], `fill="${theme.main}"`);
+      stepsHtml += `<svg class="stroke-step" data-step="${k}" viewBox="0 0 1024 1024" style="width:${stepSize}mm;height:${stepSize}mm;">${hanziGroup(prevPaths + curPath)}</svg>`;
     }
   } else {
     stepsHtml = `<div class="stroke-fallback-note" style="font-size:${Math.max(2.4, spec.fs * 0.8)}mm;color:${theme.ink};">${escapeHtml(item.char)}（共 ${count} 画）</div>`;
@@ -131,7 +151,7 @@ function renderStrokeRibbon(item, geom, theme) {
     <div class="unit-stroke"
          data-stroke-ribbon="${escapeHtml(item.char)}"
          data-stroke-steps="${count}"
-         style="left:${geom.stroke.x}mm;top:${geom.stroke.y}mm;width:${geom.stroke.w}mm;height:${geom.stroke.h}mm;background:${theme.light};">
+         style="${boxPos(geom.stroke)};background:${theme.light};">
       <div class="stroke-label" style="width:${labelW}mm;color:${theme.dark};font-size:${Math.max(2.6, spec.fs * 0.88)}mm;">
         <span>笔</span><span>顺</span>
       </div>
@@ -145,34 +165,34 @@ function renderStrokeRibbon(item, geom, theme) {
 function renderPracticeGrid(item, geom, symId, traceSymId) {
   const { x, y, w, h, cols, rows, cell, colGap = 0, rowGap = 0, trace } = geom.grid;
   const borderInset = 0.14;
-  const boxSide = +(cell - borderInset * 2).toFixed(2);
-  const glyphSize = +(cell * 0.78).toFixed(2);
-  const glyphPad = +((cell - glyphSize) / 2).toFixed(2);
+  const boxSide = n2(cell - borderInset * 2);
+  const glyphSize = n2(cell * 0.78);
+  const glyphPad = n2((cell - glyphSize) / 2);
 
   const cellsSvg = [];
   for (let r = 0; r < rows; r++) {
-    const ry = +(r * (cell + rowGap)).toFixed(2);
-    const midY = +(ry + cell / 2).toFixed(2);
+    const ry = n2(r * (cell + rowGap));
+    const midY = n2(ry + cell / 2);
 
     for (let c = 0; c < cols; c++) {
-      const cx = +(c * (cell + colGap)).toFixed(2);
-      const midX = +(cx + cell / 2).toFixed(2);
+      const cx = n2(c * (cell + colGap));
+      const midX = n2(cx + cell / 2);
       const role = c === 0 ? 'model' : r < trace ? 'trace' : 'blank';
 
       // Individual square Tianzige box + dashed crosshairs + character glyph
       cellsSvg.push(
         `<g class="grid-cell" data-cell="${r}-${c}" data-row="${r}" data-col="${c}" data-role="${role}">`,
-        `<rect x="${+(cx + borderInset).toFixed(2)}" y="${+(ry + borderInset).toFixed(2)}" width="${boxSide}" height="${boxSide}" rx="0.6" fill="#ffffff" stroke="#8a94a4" stroke-width="0.28"/>`,
-        `<line x1="${+(cx + 0.25).toFixed(2)}" y1="${midY}" x2="${+(cx + cell - 0.25).toFixed(2)}" y2="${midY}" stroke="#cbd5e1" stroke-width="0.22" stroke-dasharray="1.3,1.0"/>`,
-        `<line x1="${midX}" y1="${+(ry + 0.25).toFixed(2)}" x2="${midX}" y2="${+(ry + cell - 0.25).toFixed(2)}" stroke="#cbd5e1" stroke-width="0.22" stroke-dasharray="1.3,1.0"/>`,
+        `<rect x="${n2(cx + borderInset)}" y="${n2(ry + borderInset)}" width="${boxSide}" height="${boxSide}" rx="0.6" fill="#ffffff" stroke="#8a94a4" stroke-width="0.28"/>`,
+        `<line x1="${n2(cx + 0.25)}" y1="${midY}" x2="${n2(cx + cell - 0.25)}" y2="${midY}" ${GRID_HAIR}/>`,
+        `<line x1="${midX}" y1="${n2(ry + 0.25)}" x2="${midX}" y2="${n2(ry + cell - 0.25)}" ${GRID_HAIR}/>`,
       );
-      if (role === 'model') {
+      if (role === 'model' || role === 'trace') {
+        const gx = n2(cx + glyphPad);
+        const gy = n2(ry + glyphPad);
         cellsSvg.push(
-          `<use class="glyph-model" href="#${symId}" x="${+(cx + glyphPad).toFixed(2)}" y="${+(ry + glyphPad).toFixed(2)}" width="${glyphSize}" height="${glyphSize}" fill="#c4302b"/>`,
-        );
-      } else if (role === 'trace') {
-        cellsSvg.push(
-          `<use class="glyph-trace" data-trace-style="dashed" href="#${traceSymId}" x="${+(cx + glyphPad).toFixed(2)}" y="${+(ry + glyphPad).toFixed(2)}" width="${glyphSize}" height="${glyphSize}"/>`,
+          role === 'model'
+            ? `<use class="glyph-model" href="#${symId}" x="${gx}" y="${gy}" width="${glyphSize}" height="${glyphSize}" fill="#c4302b"/>`
+            : `<use class="glyph-trace" data-trace-style="dashed" href="#${traceSymId}" x="${gx}" y="${gy}" width="${glyphSize}" height="${glyphSize}"/>`,
         );
       }
       cellsSvg.push(`</g>`);
@@ -209,10 +229,11 @@ export function renderCharUnitHtml(item, slot, unitIdx, pageIdx, settings) {
 
   const gb = geom.glyphBox;
   const pyH = geom.pinyinH;
-  const mainBoxH = +(gb.h - pyH).toFixed(2);
-  const mainGlyphSide = +(Math.min(gb.w, mainBoxH) * 0.84).toFixed(2);
-  const mainGlyphX = +((gb.w - mainGlyphSide) / 2).toFixed(2);
-  const mainGlyphY = +((mainBoxH - mainGlyphSide) / 2).toFixed(2);
+  const mainBoxH = n2(gb.h - pyH);
+  const mainGlyphSide = n2(Math.min(gb.w, mainBoxH) * 0.84);
+  const mainGlyphX = n2((gb.w - mainGlyphSide) / 2);
+  const mainGlyphY = n2((mainBoxH - mainGlyphSide) / 2);
+  const tagStyle = `border-color:${theme.main};color:${theme.dark};`;
 
   const fs = geom.spec.fs;
   const wordsHtml = item.pickedWords
@@ -224,7 +245,7 @@ export function renderCharUnitHtml(item, slot, unitIdx, pageIdx, settings) {
              data-char="${escapeHtml(item.char)}"
              data-char-index="${item.index}"
              data-theme="${theme.id}"
-             style="left:${slot.x}mm;top:${slot.y}mm;width:${slot.w}mm;height:${slot.h}mm;--theme-main:${theme.main};--theme-dark:${theme.dark};--theme-mid:${theme.mid};--theme-light:${theme.light};--theme-soft:${theme.soft};--theme-ink:${theme.ink};">
+             style="${boxPos(slot)};--theme-main:${theme.main};--theme-dark:${theme.dark};--theme-mid:${theme.mid};--theme-light:${theme.light};--theme-soft:${theme.soft};--theme-ink:${theme.ink};">
       <svg class="unit-defs-svg" width="0" height="0" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden;pointer-events:none;">
         <defs>
           <linearGradient id="${gradId}" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -237,37 +258,37 @@ export function renderCharUnitHtml(item, slot, unitIdx, pageIdx, settings) {
       </svg>
 
       <!-- Top-left Pinyin 4-line grid + Large Main Character Tianzige -->
-      <div class="unit-glyph-box" style="left:${gb.x}mm;top:${gb.y}mm;width:${gb.w}mm;height:${gb.h}mm;border-color:${theme.dark};">
+      <div class="unit-glyph-box" style="${boxPos(gb)};border-color:${theme.dark};">
         <div class="unit-pinyin-box" style="height:${pyH}mm;border-bottom-color:${theme.dark};">
           <div class="pinyin-line pinyin-line-1" style="border-color:${theme.mid};"></div>
           <div class="pinyin-line pinyin-line-2" style="border-color:${theme.mid};"></div>
-          <span class="unit-pinyin" data-field="pinyin" style="font-size:${+(pyH * 0.52).toFixed(2)}mm;">${escapeHtml(item.pinyin)}</span>
+          <span class="unit-pinyin" data-field="pinyin" style="font-size:${n2(pyH * 0.52)}mm;">${escapeHtml(item.pinyin)}</span>
         </div>
         <div class="unit-main-char-box" style="height:${mainBoxH}mm;">
           <svg class="unit-main-char-svg" viewBox="0 0 ${gb.w} ${mainBoxH}">
-            <line x1="0" y1="${+(mainBoxH / 2).toFixed(2)}" x2="${gb.w}" y2="${+(mainBoxH / 2).toFixed(2)}" stroke="${theme.mid}" stroke-width="0.28" stroke-dasharray="1.6,1.2"/>
-            <line x1="${+(gb.w / 2).toFixed(2)}" y1="0" x2="${+(gb.w / 2).toFixed(2)}" y2="${mainBoxH}" stroke="${theme.mid}" stroke-width="0.28" stroke-dasharray="1.6,1.2"/>
+            <line x1="0" y1="${n2(mainBoxH / 2)}" x2="${gb.w}" y2="${n2(mainBoxH / 2)}" stroke="${theme.mid}" stroke-width="0.28" stroke-dasharray="1.6,1.2"/>
+            <line x1="${n2(gb.w / 2)}" y1="0" x2="${n2(gb.w / 2)}" y2="${mainBoxH}" stroke="${theme.mid}" stroke-width="0.28" stroke-dasharray="1.6,1.2"/>
             <use class="glyph-main" href="#${symId}" x="${mainGlyphX}" y="${mainGlyphY}" width="${mainGlyphSide}" height="${mainGlyphSide}" fill="#141b24"/>
           </svg>
         </div>
       </div>
 
       <!-- Top-right Illustration + Metadata Card -->
-      <div class="unit-card" style="left:${geom.card.x}mm;top:${geom.card.y}mm;width:${geom.card.w}mm;height:${geom.card.h}mm;border-color:${theme.main};">
+      <div class="unit-card" style="${boxPos(geom.card)};border-color:${theme.main};">
         ${renderIllustrationArt(item, geom, theme, symId, gradId)}
-        <div class="unit-info" style="left:${geom.info.x}mm;top:${geom.info.y}mm;width:${geom.info.w}mm;height:${geom.info.h}mm;background:${theme.light};border-Color:${theme.mid};font-size:${fs}mm;color:${theme.ink};">
+        <div class="unit-info" style="${boxPos(geom.info)};background:${theme.light};border-Color:${theme.mid};font-size:${fs}mm;color:${theme.ink};">
           <div class="info-row info-row-meta">
             <span class="meta-pair">
-              <span class="meta-tag" style="border-color:${theme.main};color:${theme.dark};">部首</span>
+              <span class="meta-tag" style="${tagStyle}">部首</span>
               <span class="meta-val" data-field="radical">${escapeHtml(item.radical)}</span>
             </span>
             <span class="meta-pair">
-              <span class="meta-tag" style="border-color:${theme.main};color:${theme.dark};">笔画</span>
+              <span class="meta-tag" style="${tagStyle}">笔画</span>
               <span class="meta-val" data-field="strokes">${item.strokes}</span>
             </span>
           </div>
           <div class="info-row info-row-words">
-            <span class="meta-tag" style="border-color:${theme.main};color:${theme.dark};">组词</span>
+            <span class="meta-tag" style="${tagStyle}">组词</span>
             <span class="meta-val meta-words" data-field="words">${wordsHtml}</span>
           </div>
         </div>

@@ -1,6 +1,10 @@
 /**
  * E2E PDF Verification for 150 Random Non-Repeating Characters at Layout 3 (`r150l3-<hex4>`).
  *
+ * Not a print entry point. Generate a layout-3 sheet with
+ * `npm run print:layout-3` or the absolute jobs[].argv from
+ * `node printer/scripts/print-pdf.mjs --describe` (example dataset is the app default).
+ *
  * - Samples 150 random characters from `printer/spec/data/hanzi-1000-v6.json`
  *   while avoiding characters already recorded in `printer/e2e/output/run-history.json`.
  * - Generates a 4-hex-character run ID and prefixes all output files with `r150l3-<runId>`.
@@ -16,6 +20,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { PDF_EXPORT } from '../js/print-config.js';
 import { startStaticServer } from '../scripts/serve.mjs';
 import {
   inspectPdfTextAndMeta,
@@ -73,11 +78,7 @@ async function uploadJsonDataset(page, dataObj, filename = 'fixture.json') {
 async function exportPdfBuffer(page, outPath = null) {
   await page.evaluate(() => window.__hanziPrintPrepare());
   await page.waitForFunction(() => document.body.dataset.printReady === 'true');
-  const pdfBuf = await page.pdf({
-    format: 'Letter',
-    printBackground: true,
-    preferCSSPageSize: true,
-  });
+  const pdfBuf = await page.pdf(PDF_EXPORT);
   if (outPath) {
     writeFileSync(outPath, pdfBuf);
   }

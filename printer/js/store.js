@@ -120,9 +120,10 @@ export function createPrintStore(initialSettings = {}) {
     return { key, copy };
   }
 
-  async function persistOverrides() {
-    const res = persistOverridesSync();
-    if (res) await idbSet(res.key, res.copy);
+  async function commitOverrides(detail) {
+    const sync = persistOverridesSync();
+    notify('override', detail);
+    if (sync) await idbSet(sync.key, sync.copy);
   }
 
   async function loadDataset(input, { keepSelection = false } = {}) {
@@ -238,9 +239,7 @@ export function createPrintStore(initialSettings = {}) {
     } else {
       state.overrides[ch] = cur;
     }
-    const sync = persistOverridesSync();
-    notify('override', { char: ch });
-    if (sync) await idbSet(sync.key, sync.copy);
+    await commitOverrides({ char: ch });
   }
 
   async function resetCharOverride(ch) {
@@ -248,9 +247,7 @@ export function createPrintStore(initialSettings = {}) {
     const prev = JSON.parse(JSON.stringify(state.overrides[ch]));
     state.undoStack.push({ char: ch, prev });
     delete state.overrides[ch];
-    const sync = persistOverridesSync();
-    notify('override', { char: ch });
-    if (sync) await idbSet(sync.key, sync.copy);
+    await commitOverrides({ char: ch });
   }
 
   async function undoLastOverride() {
@@ -261,18 +258,14 @@ export function createPrintStore(initialSettings = {}) {
     } else {
       delete state.overrides[last.char];
     }
-    const sync = persistOverridesSync();
-    notify('override', { char: last.char, undo: true });
-    if (sync) await idbSet(sync.key, sync.copy);
+    await commitOverrides({ char: last.char, undo: true });
     return last.char;
   }
 
   async function clearAllOverrides() {
     state.overrides = {};
     state.undoStack = [];
-    const sync = persistOverridesSync();
-    notify('override', { all: true });
-    if (sync) await idbSet(sync.key, sync.copy);
+    await commitOverrides({ all: true });
   }
 
   function resolveCharItem(ch, assetBase = './assets/emoji/') {
