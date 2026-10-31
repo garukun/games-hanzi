@@ -8,6 +8,7 @@
     "start": "node scripts/serve.mjs",
     "test": "node --test tests/*.test.js",
     "test:e2e": "node --test e2e/print.spec.mjs",
+    "test:e2e:r150l3": "node --test e2e/r150l3.spec.mjs",
     "build:assets": "node scripts/print-assets.mjs",
     "build:strokes": "node scripts/print-assets.mjs strokes",
     "build:strokes:pretty": "node scripts/print-assets.mjs strokes --pretty"
